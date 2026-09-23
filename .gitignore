@@ -1,0 +1,39 @@
+# Heartfolio - Git Ignore File
+
+# Database files
+*.sql
+database/*.sql
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+error.log
+access.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Uploaded files (if any)
+uploads/
+assets/images/uploads/
+
+# Environment files
+.env
+.env.local
+
+# Cache
+cache/
+*.cache

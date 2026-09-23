@@ -1,0 +1,18 @@
+<?php
+// Database Configuration
+$host = 'localhost';
+$username = 'root';
+$password = '';
+$database = 'heartfolio';
+
+// Create Connection
+$conn = new mysqli($host, $username, $password, $database);
+
+// Check Connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// Set Charset
+$conn->set_charset("utf8mb4");
+?>

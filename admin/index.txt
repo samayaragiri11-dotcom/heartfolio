@@ -1,0 +1,172 @@
+<?php
+session_start();
+if (!isset($_SESSION['user_id']) || $_SESSION['email'] != 'admin@heartfolio.com') {
+    header("Location: ../login.php");
+    exit();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Heartfolio</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="admin-layout">
+        <!-- Sidebar -->
+        <aside class="admin-sidebar">
+            <img src="../assets/images/logo.jpg" alt="Heartfolio" style="height: 50px; margin-bottom: 20px; border-radius: 50%;">
+            <h2>Heartfolio Admin</h2>
+            <ul>
+                <li><a href="index.php" class="active">Dashboard</a></li>
+                <li><a href="products.php">Products</a></li>
+                <li><a href="orders.php">Orders</a></li>
+                <li><a href="inventory.php">Inventory</a></li>
+                <li><a href="sales.php">Sales Records</a></li>
+                <li><a href="../index.php">View Website</a></li>
+                <li><a href="../logout.php">Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="admin-content">
+            <div class="admin-header">
+                <h1>Dashboard</h1>
+                <div class="admin-user">
+                    <span>Welcome, Admin</span>
+                </div>
+            </div>
+
+            <!-- Dashboard Cards -->
+            <div class="dashboard-cards">
+                <div class="dashboard-card">
+                    <h3>Total Products</h3>
+                    <div class="number">24</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Total Orders</h3>
+                    <div class="number">156</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Total Customers</h3>
+                    <div class="number">89</div>
+                </div>
+                <div class="dashboard-card">
+                    <h3>Total Sales</h3>
+                    <div class="number">Rs. 1,45,678</div>
+                </div>
+            </div>
+
+            <!-- Dashboard Sections -->
+            <div class="dashboard-sections">
+                <!-- Recent Orders -->
+                <div class="dashboard-section">
+                    <h3>Recent Orders</h3>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>#HF-2024-001</td>
+                                <td>John Doe</td>
+                                <td>Rs. 2,197</td>
+                                <td><span class="status pending">Pending</span></td>
+                            </tr>
+                            <tr>
+                                <td>#HF-2024-002</td>
+                                <td>Jane Smith</td>
+                                <td>Rs. 699</td>
+                                <td><span class="status processing">Processing</span></td>
+                            </tr>
+                            <tr>
+                                <td>#HF-2024-003</td>
+                                <td>Bob Wilson</td>
+                                <td>Rs. 1,398</td>
+                                <td><span class="status shipped">Shipped</span></td>
+                            </tr>
+                            <tr>
+                                <td>#HF-2024-004</td>
+                                <td>Alice Brown</td>
+                                <td>Rs. 699</td>
+                                <td><span class="status delivered">Delivered</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Top Selling Products -->
+                <div class="dashboard-section">
+                    <h3>Top Selling Products</h3>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Sold</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Best Friends</td>
+                                <td>45</td>
+                            </tr>
+                            <tr>
+                                <td>Our Story</td>
+                                <td>38</td>
+                            </tr>
+                            <tr>
+                                <td>Family Memories</td>
+                                <td>32</td>
+                            </tr>
+                            <tr>
+                                <td>Birthday Special</td>
+                                <td>28</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Sales Overview -->
+            <div class="dashboard-section" style="margin-top: 20px;">
+                <h3>Sales Overview</h3>
+                <div style="height: 200px; display: flex; align-items: flex-end; justify-content: space-around; padding: 20px;">
+                    <div style="text-align: center;">
+                        <div style="height: 120px; width: 40px; background-color: var(--sand); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">Jan</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="height: 80px; width: 40px; background-color: var(--sand); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">Feb</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="height: 100px; width: 40px; background-color: var(--sand); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">Mar</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="height: 140px; width: 40px; background-color: var(--sand); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">Apr</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="height: 90px; width: 40px; background-color: var(--sand); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">May</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="height: 160px; width: 40px; background-color: var(--soft-pink); margin: 0 auto;"></div>
+                        <p style="margin-top: 10px; font-size: 12px;">Jun</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
