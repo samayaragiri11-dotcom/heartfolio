@@ -21,7 +21,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 <div class="container">
     <div class="form-container">
-        <img src="logo.jpg" alt="Heartfolio">
+        <img src="assets/images/logo.jpg" alt="Heartfolio" onerror="this.style.display='none'">
         <h2>Welcome Back</h2>
         <p>Log in to your account</p>
 

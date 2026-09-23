@@ -1,4 +1,11 @@
-<?php include 'assets/includes/navbar.php'; ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+include_once 'assets/includes/products-data.php';
+$featuredIds = [1, 12, 7, 8]; // Best Friends, Love Forever, Birthday Special, Family Memories
+include 'assets/includes/navbar.php';
+?>
 
 <!-- Hero Section -->
 <section class="hero">
@@ -9,7 +16,7 @@
             <a href="shop.php" class="btn btn-primary">Shop Now</a>
         </div>
         <div class="hero-image">
-            <img src="assets\images\hero.png.jpg" alt="Heartfolio Magazines">
+            <img src="assets/images/hero.png.jpg" alt="Heartfolio Magazines">
         </div>
     </div>
 </section>
@@ -42,38 +49,10 @@
             <p>Our most popular personalized magazines</p>
         </div>
         <div class="product-grid">
-            <div class="product-card">
-                <img src="assets\images\beatfriends.jpeg" alt="Best Friends Magazine">
-                <div class="product-card-body">
-                    <h3>Best Friends</h3>
-                    <p class="price">Rs. 699</p>
-                    <a href="product-details.php?id=1" class="btn btn-secondary">View Details</a>
-                </div>
-            </div>
-            <div class="product-card">
-                <img src="assets\images\loveforever.jpeg" alt="Love Forever Magazine">
-                <div class="product-card-body">
-                    <h3>Love Forever</h3>
-                    <p class="price">Rs. 699</p>
-                    <a href="product-details.php?id=2" class="btn btn-secondary">View Details</a>
-                </div>
-            </div>
-            <div class="product-card">
-                <img src="assets\images\birthday.jpeg" alt="Birthday Special Magazine">
-                <div class="product-card-body">
-                    <h3>Birthday Special</h3>
-                    <p class="price">Rs. 699</p>
-                    <a href="product-details.php?id=3" class="btn btn-secondary">View Details</a>
-                </div>
-            </div>
-            <div class="product-card">
-                <img src="assets\images\family.jpeg" alt="Family Memories Magazine">
-                <div class="product-card-body">
-                    <h3>Family Memories</h3>
-                    <p class="price">Rs. 699</p>
-                    <a href="product-details.php?id=4" class="btn btn-secondary">View Details</a>
-                </div>
-            </div>
+            <?php foreach ($featuredIds as $id) {
+                $p = hf_product($id);
+                if ($p) { hf_product_card($p); }
+            } ?>
         </div>
     </div>
 </section>

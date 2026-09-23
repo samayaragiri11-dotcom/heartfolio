@@ -23,7 +23,7 @@ if (session_status() === PHP_SESSION_NONE) {
 <!-- SIGNUP FORM -->
 <div class="container">
     <div class="form-container">
-        <img src="logo.jpg" alt="Heartfolio">
+        <img src="assets/images/logo.jpg" alt="Heartfolio" onerror="this.style.display='none'">
         <h2>Create Your Account</h2>
         <p>Join Heartfolio today</p>
 

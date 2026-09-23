@@ -1,3 +1,4 @@
+    <script src="assets/js/cart.js"></script>
     <footer class="footer">
         <div class="container">
             <div class="footer-content">

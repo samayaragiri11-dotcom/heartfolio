@@ -1,32 +1,85 @@
-<?php 
-session_start();
-include 'assets/includes/navbar.php'; 
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+include 'assets/includes/navbar.php';
 ?>
 
 <div class="container order-confirmation">
-    <div class="success-icon">
-        <i class="fas fa-check-circle"></i>
-    </div>
-    <h1>Order Placed Successfully!</h1>
-    <p>Thank you for your purchase. Your order has been received.</p>
+    <div id="order-found" style="display: none;">
+        <div class="success-icon" id="success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h1 id="order-heading">Order Placed Successfully!</h1>
+        <p id="order-subheading">Thank you for your purchase. Your order has been received.</p>
 
-    <div class="order-details">
-        <p><strong>Order ID:</strong> #HF-2024-001</p>
-        <p><strong>Order Date:</strong> September 22, 2024</p>
-        <p><strong>Order Status:</strong> <span class="status pending">Pending</span></p>
-        <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--sand);">
-        <p><strong>Products:</strong></p>
-        <ul style="margin-left: 20px; color: var(--text-light);">
-            <li>Best Friends x 2 - Rs. 1,398</li>
-            <li>Our Story x 1 - Rs. 699</li>
-        </ul>
-        <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--sand);">
-        <p><strong>Subtotal:</strong> Rs. 2,097</p>
-        <p><strong>Shipping:</strong> Rs. 100</p>
-        <p><strong>Total Amount:</strong> Rs. 2,197</p>
+        <div class="order-details">
+            <p><strong>Order ID:</strong> <span id="order-id"></span></p>
+            <p><strong>Order Date:</strong> <span id="order-date"></span></p>
+            <p><strong>Order Status:</strong> <span class="status pending" id="order-status"></span></p>
+            <p><strong>Payment:</strong> <span id="order-payment"></span></p>
+            <p><strong>Deliver to:</strong> <span id="order-address"></span></p>
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--sand);">
+            <p><strong>Products:</strong></p>
+            <ul id="order-items" style="margin-left: 20px; color: var(--text-light);"></ul>
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--sand);">
+            <p><strong>Subtotal:</strong> <span id="order-subtotal"></span></p>
+            <p><strong>Shipping:</strong> <span id="order-shipping"></span></p>
+            <p><strong>Total Amount:</strong> <span id="order-total"></span></p>
+        </div>
+
+        <a href="account.php" class="btn btn-primary">View My Orders</a>
     </div>
 
-    <a href="account.php" class="btn btn-primary">View My Orders</a>
+    <div id="order-missing" style="display: none; text-align: center;">
+        <h1>Order not found</h1>
+        <p style="margin: 10px 0 20px;">Check the link, or find the order in your account.</p>
+        <a href="account.php" class="btn btn-primary">Go to My Orders</a>
+    </div>
 </div>
+
+<script src="assets/js/cart.js"></script>
+<script>
+(function () {
+    var params = new URLSearchParams(window.location.search);
+    var order = HFCart.getOrder(params.get('order') || '');
+
+    if (!order) {
+        document.getElementById('order-missing').style.display = 'block';
+        return;
+    }
+
+    var esc = HFCart.escapeHtml;
+    var money = HFCart.formatPrice;
+    var paymentNames = { cod: 'Cash on Delivery', esewa: 'eSewa', khalti: 'Khalti' };
+
+    // Just placed vs. opened later from the account page
+    if (params.get('new') !== '1') {
+        document.getElementById('success-icon').style.display = 'none';
+        document.getElementById('order-heading').textContent = 'Order Details';
+        document.getElementById('order-subheading').textContent = 'Here is a summary of this order.';
+    }
+
+    document.getElementById('order-id').textContent = '#' + order.id;
+    document.getElementById('order-date').textContent = HFCart.formatDate(order.date);
+    document.getElementById('order-status').textContent = order.status;
+    document.getElementById('order-payment').textContent = paymentNames[order.customer.payment] || order.customer.payment;
+    document.getElementById('order-address').textContent = order.customer.address + ', ' + order.customer.city;
+
+    document.getElementById('order-items').innerHTML = order.items.map(function (item) {
+        return '<li>' + esc(item.name) + ' x ' + item.qty + ' - ' + money(item.price * item.qty) + '</li>';
+    }).join('');
+
+    document.getElementById('order-subtotal').textContent = money(order.totals.subtotal);
+    document.getElementById('order-shipping').textContent = money(order.totals.shipping);
+    document.getElementById('order-total').textContent = money(order.totals.total);
+
+    document.getElementById('order-found').style.display = 'block';
+})();
+</script>
 
 <?php include 'assets/includes/footer.php'; ?>

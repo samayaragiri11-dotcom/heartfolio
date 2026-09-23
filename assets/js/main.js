@@ -3,23 +3,23 @@
 // Cart functionality
 let cart = [];
 
-function addToCart(productId, productName, price, quantity = 1) {
-    const existingItem = cart.find(item => item.id === productId);
+// function addToCart(productId, productName, price, quantity = 1) {
+//     const existingItem = cart.find(item => item.id === productId);
     
-    if (existingItem) {
-        existingItem.quantity += quantity;
-    } else {
-        cart.push({
-            id: productId,
-            name: productName,
-            price: price,
-            quantity: quantity
-        });
-    }
+//     if (existingItem) {
+//         existingItem.quantity += quantity;
+//     } else {
+//         cart.push({
+//             id: productId,
+//             name: productName,
+//             price: price,
+//             quantity: quantity
+//         });
+//     }
     
-    updateCartCount();
-    showNotification('Product added to cart!');
-}
+//     updateCartCount();
+//     showNotification('Product added to cart!');
+// }
 
 function removeFromCart(productId) {
     cart = cart.filter(item => item.id !== productId);
@@ -27,13 +27,6 @@ function removeFromCart(productId) {
     updateCartDisplay();
 }
 
-function updateCartCount() {
-    const count = cart.reduce((total, item) => total + item.quantity, 0);
-    const cartCountElement = document.getElementById('cart-count');
-    if (cartCountElement) {
-        cartCountElement.textContent = count;
-    }
-}
 
 function updateCartDisplay() {
     // This would update the cart page display
