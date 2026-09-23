@@ -1,5 +1,7 @@
 <?php 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -9,6 +11,7 @@ session_start();
     <title>Heartfolio - Custom Magazines</title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="assets/js/cart.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -18,21 +21,15 @@ session_start();
             </a>
             <ul class="nav-links">
                 <li><a href="index.php">Home</a></li>
-                <?php if (isset($_SESSION['user_id'])): ?>
-                    <li><a href="shop.php">Shop</a></li>
-                    <li><a href="templates.php">Templates</a></li>
-                    <li><a href="contact.php">Contact</a></li>
-                <?php else: ?>
-                    <li><a href="login.php">Shop</a></li>
-                    <li><a href="login.php">Templates</a></li>
-                    <li><a href="contact.php">Contact</a></li>
-                <?php endif; ?>
+                <li><a href="shop.php">Shop</a></li>
+                <li><a href="templates.php">Templates</a></li>
+                <li><a href="contact.php">Contact</a></li>
             </ul>
             <div class="nav-icons">
-                <a href="search.php"><i class="fas fa-search"></i></a>
-                <a href="cart.php">
+                <a href="search.php" title="Search"><i class="fas fa-search"></i></a>
+                <a href="cart.php" title="Cart">
                     <i class="fas fa-shopping-cart"></i>
-                    <span class="cart-badge" id="cart-count">0</span>
+                    <span class="cart-badge" id="cart-count" data-cart-count>0</span>
                 </a>
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <a href="account.php" title="My Account"><i class="fas fa-user"></i></a>
