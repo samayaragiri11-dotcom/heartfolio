@@ -42,7 +42,7 @@ include 'assets/includes/navbar.php';
     </div>
 </div>
 
-<script src="assets/js/cart.js"></script>
+<script src="assets/js/photo-store.js"></script>
 <script>
 (function () {
     var params = new URLSearchParams(window.location.search);
@@ -71,8 +71,29 @@ include 'assets/includes/navbar.php';
     document.getElementById('order-address').textContent = order.customer.address + ', ' + order.customer.city;
 
     document.getElementById('order-items').innerHTML = order.items.map(function (item) {
-        return '<li>' + esc(item.name) + ' x ' + item.qty + ' - ' + money(item.price * item.qty) + '</li>';
+        var c = item.custom;
+        var extra = '';
+        if (c) {
+            extra = '<div style="display: flex; gap: 12px; margin: 8px 0 12px;">' +
+                '<img data-photo-key="' + esc(c.photoKey) + '" alt="Your cover photo" ' +
+                    'style="width: 60px; height: 78px; object-fit: cover; border-radius: 4px; background: var(--warm-beige, #F1E6D6);">' +
+                '<div style="font-size: 13px;">' +
+                    '<div><strong>Title:</strong> ' + esc(c.title || item.name) + '</div>' +
+                    (c.names ? '<div><strong>Names:</strong> ' + esc(c.names) + '</div>' : '') +
+                    (c.message ? '<div><strong>Message:</strong> ' + esc(c.message) + '</div>' : '') +
+                    '<div><strong>Photos:</strong> 1 cover + ' + (c.pageCount || 0) + ' inside</div>' +
+                '</div>' +
+            '</div>';
+        }
+        return '<li>' + esc(item.name) + ' x ' + item.qty + ' - ' + money(item.price * item.qty) + extra + '</li>';
     }).join('');
+
+    // Fill in each customized item's cover photo from browser storage
+    document.querySelectorAll('#order-items img[data-photo-key]').forEach(function (img) {
+        HFPhotos.get(img.getAttribute('data-photo-key')).then(function (data) {
+            if (data && data.cover) img.src = URL.createObjectURL(data.cover);
+        }).catch(function () {});
+    });
 
     document.getElementById('order-subtotal').textContent = money(order.totals.subtotal);
     document.getElementById('order-shipping').textContent = money(order.totals.shipping);

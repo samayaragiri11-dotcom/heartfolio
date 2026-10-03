@@ -67,6 +67,12 @@ include 'assets/includes/navbar.php';
                 <button type="button" class="btn btn-primary" onclick="addToCart()">Add to Cart</button>
                 <button type="button" class="btn btn-pink" onclick="buyNow()">Buy Now</button>
             </div>
+            <div class="customize-cta" style="margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--sand, #DCC7AD);">
+                <p style="margin-bottom: 12px;">Make it yours: add your own photos, a title and a message.</p>
+                <a href="customize.php?id=<?php echo (int)$product['id']; ?>" class="btn btn-secondary">
+                    <i class="fas fa-pen" aria-hidden="true"></i> Customize with your photos
+                </a>
+            </div>
         </div>
     </div>
 </div>

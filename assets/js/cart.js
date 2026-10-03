@@ -1,7 +1,12 @@
 /*
  * Heartfolio cart (front-end only, no database).
- * The cart and orders are saved in the browser's localStorage,
- * so they survive page changes and refreshes.
+ * The cart and orders are saved in the browser's localStorage.
+ *
+ * Every cart line has a "key":
+ *   - plain product   -> key is the product id, e.g. "3"
+ *   - customized copy -> key is unique, e.g. "c-1696280000000"
+ * So two customized copies of the same magazine stay separate lines,
+ * each with its own photos and text.
  */
 window.HFCart = window.HFCart || (function () {
     var CART_KEY = 'heartfolio_cart';
@@ -25,7 +30,12 @@ window.HFCart = window.HFCart || (function () {
 
     function getItems() {
         var items = read(CART_KEY, []);
-        return Array.isArray(items) ? items : [];
+        if (!Array.isArray(items)) return [];
+        // Older carts had no key: plain items use their product id
+        items.forEach(function (i) {
+            if (!i.key) i.key = String(i.id);
+        });
+        return items;
     }
 
     function saveItems(items) {
@@ -33,18 +43,29 @@ window.HFCart = window.HFCart || (function () {
         updateBadge();
     }
 
-    function findItem(items, id) {
-        return items.find(function (i) { return i.id === id; });
+    function uniqueId(prefix) {
+        return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     }
 
+    function findItem(items, key) {
+        return items.find(function (i) { return i.key === String(key); });
+    }
+
+    function getItem(key) {
+        return findItem(getItems(), key) || null;
+    }
+
+    // Plain product: adds to the existing line if it is already in the cart
     function add(product, qty) {
         qty = Math.max(1, parseInt(qty, 10) || 1);
         var items = getItems();
-        var existing = findItem(items, product.id);
+        var key = String(product.id);
+        var existing = findItem(items, key);
         if (existing) {
             existing.qty += qty;
         } else {
             items.push({
+                key: key,
                 id: product.id,
                 name: product.name,
                 price: product.price,
@@ -56,18 +77,45 @@ window.HFCart = window.HFCart || (function () {
         saveItems(items);
     }
 
-    function setQty(id, qty) {
+    // Customized product: always its own line. Pass an existing key to update it.
+    function saveCustom(product, qty, custom, key) {
+        qty = Math.max(1, parseInt(qty, 10) || 1);
         var items = getItems();
-        var item = findItem(items, id);
+        var line = key ? findItem(items, key) : null;
+        if (!line) {
+            line = { key: key || uniqueId('c') };
+            items.push(line);
+        }
+        line.id = product.id;
+        line.name = product.name;
+        line.price = product.price;
+        line.image = product.image;
+        line.category = product.category;
+        line.qty = qty;
+        line.custom = custom;
+        saveItems(items);
+        return line.key;
+    }
+
+    function setQty(key, qty) {
+        var items = getItems();
+        var item = findItem(items, key);
         if (!item) return;
         item.qty = Math.max(1, parseInt(qty, 10) || 1);
         saveItems(items);
     }
 
-    function remove(id) {
-        saveItems(getItems().filter(function (i) { return i.id !== id; }));
+    // Removes a line. A customized line's photos are deleted too.
+    function remove(key) {
+        var items = getItems();
+        var item = findItem(items, key);
+        if (item && item.custom && item.custom.photoKey && window.HFPhotos) {
+            HFPhotos.remove(item.custom.photoKey).catch(function () {});
+        }
+        saveItems(items.filter(function (i) { return i.key !== String(key); }));
     }
 
+    // Empties the cart WITHOUT deleting photos (used after an order keeps them)
     function clear() {
         saveItems([]);
     }
@@ -95,6 +143,16 @@ window.HFCart = window.HFCart || (function () {
         return String(str).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+    // One-line description of a customization, for cart and order pages
+    function customSummary(custom) {
+        if (!custom) return '';
+        var parts = [];
+        if (custom.title) parts.push('"' + custom.title + '"');
+        var photos = (custom.hasCover ? 1 : 0) + (custom.pageCount || 0);
+        parts.push(photos + (photos === 1 ? ' photo' : ' photos'));
+        return parts.join(', ');
     }
 
     function getOrders() {
@@ -154,7 +212,7 @@ window.HFCart = window.HFCart || (function () {
         el._timer = setTimeout(function () {
             el.style.opacity = '0';
             el.style.transform = 'translate(-50%,20px)';
-        }, 2200);
+        }, 2400);
     }
 
     if (document.readyState === 'loading') {
@@ -162,14 +220,14 @@ window.HFCart = window.HFCart || (function () {
     } else {
         updateBadge();
     }
-    // Keeps the count in sync if the site is open in two tabs
     window.addEventListener('storage', updateBadge);
 
     return {
-        getItems: getItems, add: add, setQty: setQty, remove: remove, clear: clear,
+        getItems: getItems, getItem: getItem, add: add, saveCustom: saveCustom,
+        setQty: setQty, remove: remove, clear: clear,
         count: count, totals: totals, placeOrder: placeOrder,
         getOrders: getOrders, getOrder: getOrder,
         formatPrice: formatPrice, formatDate: formatDate, escapeHtml: escapeHtml,
-        updateBadge: updateBadge, toast: toast
+        customSummary: customSummary, uniqueId: uniqueId, updateBadge: updateBadge, toast: toast
     };
 })();

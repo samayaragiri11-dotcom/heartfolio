@@ -84,7 +84,6 @@ include 'assets/includes/navbar.php';
     </div>
 </div>
 
-<script src="assets/js/cart.js"></script>
 <script>
 (function () {
     var ACCOUNT_EMAIL = <?php echo json_encode($prefillEmail, JSON_HEX_TAG | JSON_HEX_AMP); ?>;
@@ -101,7 +100,9 @@ include 'assets/includes/navbar.php';
 
     document.getElementById('summary-items').innerHTML = items.map(function (item) {
         return '<div class="checkout-summary-item">' +
-            '<span>' + esc(item.name) + ' x ' + item.qty + '</span>' +
+            '<span>' + esc(item.name) + ' x ' + item.qty +
+                (item.custom ? '<br><small style="color: var(--soft-pink, #D98291);">Customized: ' + esc(HFCart.customSummary(item.custom)) + '</small>' : '') +
+            '</span>' +
             '<span>' + money(item.price * item.qty) + '</span>' +
         '</div>';
     }).join('');

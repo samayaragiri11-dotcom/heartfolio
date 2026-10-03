@@ -2,9 +2,13 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 include 'assets/includes/navbar.php';
 ?>
+
+<style>
+.cart-custom-note { font-size: 12px; color: var(--soft-pink, #D98291); margin-top: 4px; }
+.cart-custom-note a { font-weight: 600; margin-left: 6px; }
+</style>
 
 <div class="container cart-page">
     <div class="section-title">
@@ -51,21 +55,30 @@ include 'assets/includes/navbar.php';
     </div>
 </div>
 
-<script src="assets/js/cart.js"></script>
+<script src="assets/js/photo-store.js"></script>
 <script>
 (function () {
     var body = document.getElementById('cart-body');
     var esc = HFCart.escapeHtml;
     var money = HFCart.formatPrice;
+    var coverUrls = {}; // photoKey -> object URL of the customer's cover photo
 
     function rowHtml(item) {
-        return '<tr data-id="' + item.id + '">' +
+        var custom = item.custom;
+        var imgSrc = (custom && coverUrls[custom.photoKey]) || item.image;
+        var note = custom
+            ? '<p class="cart-custom-note">Customized: ' + esc(HFCart.customSummary(custom)) +
+              '<a href="customize.php?id=' + item.id + '&edit=' + encodeURIComponent(item.key) + '">Edit</a></p>'
+            : '';
+
+        return '<tr data-key="' + esc(item.key) + '">' +
             '<td>' +
                 '<div style="display: flex; align-items: center; gap: 15px;">' +
-                    '<img src="' + esc(item.image) + '" alt="' + esc(item.name) + ' Magazine">' +
+                    '<img src="' + esc(imgSrc) + '" alt="' + esc(item.name) + ' Magazine" data-photo-key="' + esc(custom ? custom.photoKey : '') + '">' +
                     '<div>' +
                         '<h4>' + esc(item.name) + '</h4>' +
                         '<p style="font-size: 12px; color: var(--text-light);">' + esc(item.category) + '</p>' +
+                        note +
                     '</div>' +
                 '</div>' +
             '</td>' +
@@ -82,6 +95,20 @@ include 'assets/includes/navbar.php';
         '</tr>';
     }
 
+    // Loads each customized item's cover photo once, then swaps it into the row
+    function loadCovers(items) {
+        items.forEach(function (item) {
+            var key = item.custom && item.custom.photoKey;
+            if (!key || coverUrls[key]) return;
+            HFPhotos.get(key).then(function (data) {
+                if (!data || !data.cover) return;
+                coverUrls[key] = URL.createObjectURL(data.cover);
+                var img = body.querySelector('img[data-photo-key="' + key + '"]');
+                if (img) img.src = coverUrls[key];
+            }).catch(function () {});
+        });
+    }
+
     function render() {
         var items = HFCart.getItems();
         var isEmpty = items.length === 0;
@@ -91,6 +118,7 @@ include 'assets/includes/navbar.php';
         document.getElementById('cart-summary').style.display = isEmpty ? 'none' : '';
 
         body.innerHTML = items.map(rowHtml).join('');
+        loadCovers(items);
 
         var t = HFCart.totals(items);
         document.getElementById('subtotal').textContent = money(t.subtotal);
@@ -103,22 +131,30 @@ include 'assets/includes/navbar.php';
         var btn = e.target.closest('button[data-action]');
         if (!btn) return;
 
-        var id = parseInt(btn.closest('tr').getAttribute('data-id'), 10);
-        var item = HFCart.getItems().find(function (i) { return i.id === id; });
+        var key = btn.closest('tr').getAttribute('data-key');
+        var item = HFCart.getItem(key);
         if (!item) return;
 
         var action = btn.getAttribute('data-action');
         if (action === 'inc') {
-            HFCart.setQty(id, item.qty + 1);
+            HFCart.setQty(key, item.qty + 1);
         } else if (action === 'dec') {
-            HFCart.setQty(id, item.qty - 1);
+            HFCart.setQty(key, item.qty - 1);
         } else if (action === 'remove') {
-            if (!confirm('Remove ' + item.name + ' from your cart?')) return;
-            HFCart.remove(id);
+            var warning = item.custom
+                ? 'Remove your customized ' + item.name + '? Its photos will be deleted.'
+                : 'Remove ' + item.name + ' from your cart?';
+            if (!confirm(warning)) return;
+            HFCart.remove(key);
             HFCart.toast(item.name + ' removed from cart');
         }
         render();
     });
+
+    // Message after coming back from the customize page
+    var done = new URLSearchParams(window.location.search).get('customized');
+    if (done === 'added') HFCart.toast('Customized magazine added to cart');
+    if (done === 'updated') HFCart.toast('Your changes are saved');
 
     window.addEventListener('storage', render);
     render();
