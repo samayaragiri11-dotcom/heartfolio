@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+$isAdmin = ($_SESSION['role'] ?? '') === 'admin';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,6 +25,9 @@ if (session_status() === PHP_SESSION_NONE) {
                 <li><a href="shop.php">Shop</a></li>
                 <li><a href="templates.php">Templates</a></li>
                 <li><a href="contact.php">Contact</a></li>
+                <?php if ($isAdmin): ?>
+                    <li><a href="admin/index.php">Admin</a></li>
+                <?php endif; ?>
             </ul>
             <div class="nav-icons">
                 <a href="search.php" title="Search"><i class="fas fa-search"></i></a>
