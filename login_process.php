@@ -1,7 +1,4 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -29,33 +26,35 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     fail('Please enter a valid email address');
 }
 
-$stmt = $conn->prepare('SELECT id, fullname, email, password FROM users WHERE email = ? LIMIT 1');
+$stmt = $conn->prepare('SELECT id, fullname, email, password, role FROM users WHERE email = ? LIMIT 1');
 if (!$stmt) {
-    fail('Database error: ' . $conn->error);
+    fail('Something went wrong. Please try again.');
 }
 $stmt->bind_param('s', $email);
 $stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows === 0) {
-    $stmt->close();
-    $conn->close();
-    fail('Invalid email or password');
-}
-
-$user = $result->fetch_assoc();
+$user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-if (!password_verify($password, $user['password'])) {
+// Same message for "no such email" and "wrong password", so nobody can
+// find out which emails have accounts
+if (!$user || !password_verify($password, $user['password'])) {
     $conn->close();
     fail('Invalid email or password');
 }
+
+// New session id after login, so an old session id can't be reused
+session_regenerate_id(true);
 
 $_SESSION['user_id']  = $user['id'];
 $_SESSION['fullname'] = $user['fullname'];
 $_SESSION['email']    = $user['email'];
+$_SESSION['role']     = $user['role'];
 
 $conn->close();
 
-header('Location: index.php');
+if ($user['role'] === 'admin') {
+    header('Location: admin/index.php');
+} else {
+    header('Location: index.php');
+}
 exit();
