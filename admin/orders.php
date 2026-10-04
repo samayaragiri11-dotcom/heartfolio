@@ -1,116 +1,95 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['email'] != 'admin@heartfolio.com') {
-    header("Location: ../login.php");
-    exit();
+require_once __DIR__ . '/../assets/includes/admin-guard.php';
+
+$status = $_GET['status'] ?? '';
+$q      = trim($_GET['q'] ?? '');
+$from   = $_GET['from'] ?? '';
+$to     = $_GET['to'] ?? '';
+$page   = max(1, (int)($_GET['page'] ?? 1));
+$per    = 20;
+
+$where = ['1 = 1'];
+$params = [];
+if (isset(ORDER_STATUSES[$status])) {
+    $where[] = 'o.status = ?';
+    $params[] = $status;
 }
+if ($q !== '') {
+    $where[] = '(o.order_number LIKE ? OR o.fullname LIKE ? OR o.email LIKE ? OR o.phone LIKE ?)';
+    array_push($params, "%$q%", "%$q%", "%$q%", "%$q%");
+}
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+    $where[] = 'DATE(o.created_at) >= ?';
+    $params[] = $from;
+}
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+    $where[] = 'DATE(o.created_at) <= ?';
+    $params[] = $to;
+}
+$whereSql = ' WHERE ' . implode(' AND ', $where);
+
+$total = (int)db_value('SELECT COUNT(*) FROM orders o' . $whereSql, $params);
+$pages = max(1, (int)ceil($total / $per));
+$page  = min($page, $pages);
+$off   = ($page - 1) * $per;
+
+$orders = db_all("SELECT o.*,
+                         (SELECT SUM(quantity) FROM order_items WHERE order_id = o.id) AS item_count,
+                         (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND is_custom = 1) AS custom_count
+                  FROM orders o $whereSql ORDER BY o.created_at DESC, o.id DESC LIMIT $per OFFSET $off", $params);
+
+$statusCounts = [];
+foreach (db_all('SELECT status, COUNT(*) AS n FROM orders GROUP BY status') as $r) {
+    $statusCounts[$r['status']] = (int)$r['n'];
+}
+
+admin_header('Orders', 'orders');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Management - Heartfolio Admin</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
-    <link rel="stylesheet" href="admin.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <div class="admin-layout">
-        <!-- Sidebar -->
-        <aside class="admin-sidebar">
-            <img src="../assets/images/logo.jpg" alt="Heartfolio" style="height: 50px; margin-bottom: 20px; border-radius: 50%;">
-            <h2>Heartfolio Admin</h2>
-            <ul>
-                <li><a href="index.php">Dashboard</a></li>
-                <li><a href="products.php">Products</a></li>
-                <li><a href="orders.php" class="active">Orders</a></li>
-                <li><a href="inventory.php">Inventory</a></li>
-                <li><a href="sales.php">Sales Records</a></li>
-@                <li><a href="../index.php">View Website</a></li>
-                <li><a href="../logout.php">Logout</a></li>
-            </ul>
-        </aside>
 
-        <!-- Main Content -->
-        <main class="admin-content">
-            <div class="admin-header">
-                <h1>Order Management</h1>
-            </div>
+<div class="panel">
+    <nav class="tabs" aria-label="Order status">
+        <a href="<?php echo e(admin_url('orders.php', ['status' => '', 'page' => ''])); ?>" class="<?php echo $status === '' ? 'active' : ''; ?>">All <span><?php echo array_sum($statusCounts); ?></span></a>
+        <?php foreach (ORDER_STATUSES as $key => $label): ?>
+            <a href="<?php echo e(admin_url('orders.php', ['status' => $key, 'page' => ''])); ?>" class="<?php echo $status === $key ? 'active' : ''; ?>"><?php echo $label; ?> <span><?php echo $statusCounts[$key] ?? 0; ?></span></a>
+        <?php endforeach; ?>
+    </nav>
 
-            <!-- Orders Table -->
-            <div class="dashboard-section">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Order ID</th>
-                            <th>Customer</th>
-                            <th>Date</th>
-                            <th>Amount</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>#HF-2024-001</td>
-                            <td>John Doe</td>
-                            <td>Sep 22, 2024</td>
-                            <td>Rs. 2,197</td>
-                            <td><span class="status pending">Pending</span></td>
-                            <td>
-                                <button class="action-btn view-btn">View</button>
-                                <button class="action-btn edit-btn">Update</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>#HF-2024-002</td>
-                            <td>Jane Smith</td>
-                            <td>Sep 21, 2024</td>
-                            <td>Rs. 699</td>
-                            <td><span class="status processing">Processing</span></td>
-                            <td>
-                                <button class="action-btn view-btn">View</button>
-                                <button class="action-btn edit-btn">Update</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>#HF-2024-003</td>
-                            <td>Bob Wilson</td>
-                            <td>Sep 20, 2024</td>
-                            <td>Rs. 1,398</td>
-                            <td><span class="status shipped">Shipped</span></td>
-                            <td>
-                                <button class="action-btn view-btn">View</button>
-                                <button class="action-btn edit-btn">Update</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>#HF-2024-004</td>
-                            <td>Alice Brown</td>
-                            <td>Sep 19, 2024</td>
-                            <td>Rs. 699</td>
-                            <td><span class="status delivered">Delivered</span></td>
-                            <td>
-                                <button class="action-btn view-btn">View</button>
-                                <button class="action-btn edit-btn">Update</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>#HF-2024-005</td>
-                            <td>Charlie Davis</td>
-                            <td>Sep 18, 2024</td>
-                            <td>Rs. 2,097</td>
-                            <td><span class="status cancelled">Cancelled</span></td>
-                            <td>
-                                <button class="action-btn view-btn">View</button>
-                                <button class="action-btn edit-btn">Update</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </main>
+    <form class="toolbar" method="get">
+        <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
+        <label class="sr-only" for="q">Search</label>
+        <input type="search" id="q" name="q" value="<?php echo e($q); ?>" placeholder="Order no., name, email or phone">
+        <label for="from" class="small muted">From</label>
+        <input type="date" id="from" name="from" value="<?php echo e($from); ?>">
+        <label for="to" class="small muted">To</label>
+        <input type="date" id="to" name="to" value="<?php echo e($to); ?>">
+        <button class="btn btn-ghost" type="submit">Filter</button>
+        <?php if ($q !== '' || $from !== '' || $to !== ''): ?><a href="orders.php<?php echo $status ? '?status=' . e($status) : ''; ?>" class="btn btn-ghost">Clear</a><?php endif; ?>
+    </form>
+
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th class="num">Items</th><th class="num">Total</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <?php if (!$orders): ?><tr><td colspan="8" class="empty-row">No orders match these filters.</td></tr><?php endif; ?>
+            <?php foreach ($orders as $o): ?>
+                <tr>
+                    <td>
+                        <a class="row-title" href="order-view.php?n=<?php echo urlencode($o['order_number']); ?>"><?php echo e($o['order_number']); ?></a>
+                        <?php if ((int)$o['custom_count']): ?><br><span class="pill pill-pink"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Custom photos</span><?php endif; ?>
+                    </td>
+                    <td class="muted"><?php echo e(nice_date($o['created_at'], true)); ?></td>
+                    <td><?php echo e($o['fullname']); ?><div class="muted small"><?php echo e($o['city']); ?></div></td>
+                    <td class="num"><?php echo (int)$o['item_count']; ?></td>
+                    <td class="num"><?php echo price($o['total']); ?></td>
+                    <td class="small"><?php echo e(PAYMENT_METHODS[$o['payment_method']] ?? $o['payment_method']); ?></td>
+                    <td><?php echo status_badge($o['status']); ?></td>
+                    <td><a class="btn btn-ghost btn-sm" href="order-view.php?n=<?php echo urlencode($o['order_number']); ?>">Open</a></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
-</body>
-</html>
+    <?php echo admin_pagination($page, $pages, 'orders.php'); ?>
+</div>
+
+<?php admin_footer(); ?>

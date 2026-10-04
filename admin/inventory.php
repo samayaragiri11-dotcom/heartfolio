@@ -1,132 +1,101 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['email'] != 'admin@heartfolio.com') {
-    header("Location: ../login.php");
-    exit();
+require_once __DIR__ . '/../assets/includes/admin-guard.php';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $id = (int)($_POST['id'] ?? 0);
+    $p = db_one('SELECT name, stock FROM products WHERE id = ?', [$id]);
+    $mode = $_POST['mode'] ?? 'set';
+    $amount = (int)($_POST['amount'] ?? 0);
+
+    if (!$p) {
+        flash('error', 'That product no longer exists.');
+    } else {
+        $new = $mode === 'add' ? (int)$p['stock'] + $amount : $amount;
+        if ($new < 0 || $new > 100000) {
+            flash('error', 'Stock must be between 0 and 100,000.');
+        } else {
+            db_exec('UPDATE products SET stock = ? WHERE id = ?', [$new, $id]);
+            flash('success', $p['name'] . ': stock changed from ' . (int)$p['stock'] . ' to ' . $new . '.');
+        }
+    }
+    redirect(back_url('inventory.php'));
 }
+
+$filter = $_GET['filter'] ?? '';
+$where = 'WHERE 1 = 1';
+if ($filter === 'low') {
+    $where .= ' AND p.stock > 0 AND p.stock <= ' . LOW_STOCK_LIMIT;
+} elseif ($filter === 'out') {
+    $where .= ' AND p.stock <= 0';
+}
+
+$rows = db_all("SELECT p.id, p.name, p.image, p.stock, p.is_active, c.name AS category_name,
+                       (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                        WHERE oi.product_id = p.id AND o.status <> 'cancelled' AND o.created_at >= ?) AS sold30
+                FROM products p LEFT JOIN categories c ON c.id = p.category_id
+                $where ORDER BY p.stock ASC, p.name", [date('Y-m-d', strtotime('-29 days'))]);
+
+$counts = db_one('SELECT SUM(stock > ' . LOW_STOCK_LIMIT . ') AS ok, SUM(stock > 0 AND stock <= ' . LOW_STOCK_LIMIT . ') AS low,
+                         SUM(stock <= 0) AS out_count, COALESCE(SUM(stock), 0) AS units FROM products');
+
+admin_header('Inventory', 'inventory');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Management - Heartfolio Admin</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
-    <link rel="stylesheet" href="admin.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <div class="admin-layout">
-        <!-- Sidebar -->
-        <aside class="admin-sidebar">
-            <img src="../assets/images/logo.jpg" alt="Heartfolio" style="height: 50px; margin-bottom: 20px; border-radius: 50%;">
-            <h2>Heartfolio Admin</h2>
-            <ul>
-                <li><a href="index.php">Dashboard</a></li>
-                <li><a href="products.php">Products</a></li>
-                <li><a href="orders.php">Orders</a></li>
-                <li><a href="inventory.php" class="active">Inventory</a></li>
-                <li><a href="sales.php">Sales Records</a></li>
-                <li><a href="../index.php">View Website</a></li>
-                <li><a href="../logout.php">Logout</a></li>
-            </ul>
-        </aside>
 
-        <!-- Main Content -->
-        <main class="admin-content">
-            <div class="admin-header">
-                <h1>Inventory Management</h1>
-            </div>
+<div class="kpis">
+    <div class="kpi"><div class="label">Copies in stock</div><div class="value"><?php echo (int)$counts['units']; ?></div><div class="sub">Across all products</div></div>
+    <div class="kpi"><div class="label">Well stocked</div><div class="value"><?php echo (int)$counts['ok']; ?></div><div class="sub">More than <?php echo LOW_STOCK_LIMIT; ?> copies</div></div>
+    <a class="kpi" href="inventory.php?filter=low" style="text-decoration: none;"><div class="label">Low stock</div><div class="value"><?php echo (int)$counts['low']; ?></div><div class="sub"><?php echo LOW_STOCK_LIMIT; ?> or fewer left</div></a>
+    <a class="kpi" href="inventory.php?filter=out" style="text-decoration: none;"><div class="label">Sold out</div><div class="value"><?php echo (int)$counts['out_count']; ?></div><div class="sub">Customers can't order these</div></a>
+</div>
 
-            <!-- Inventory Table -->
-            <div class="dashboard-section">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Category</th>
-                            <th>Available Stock</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Best Friends</td>
-                            <td>Friendship</td>
-                            <td>25</td>
-                            <td><span class="inventory-status in-stock">In Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Friendship Forever</td>
-                            <td>Friendship</td>
-                            <td>18</td>
-                            <td><span class="inventory-status in-stock">In Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Our Story</td>
-                            <td>Love & Couple</td>
-                            <td>30</td>
-                            <td><span class="inventory-status in-stock">In Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Birthday Special</td>
-                            <td>Birthday</td>
-                            <td>5</td>
-                            <td><span class="inventory-status low-stock">Low Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Family Memories</td>
-                            <td>Family</td>
-                            <td>15</td>
-                            <td><span class="inventory-status in-stock">In Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Anniversary Love</td>
-                            <td>Anniversary</td>
-                            <td>0</td>
-                            <td><span class="inventory-status out-of-stock">Out of Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Travel Adventures</td>
-                            <td>Travel</td>
-                            <td>22</td>
-                            <td><span class="inventory-status in-stock">In Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>Special Moments</td>
-                            <td>Others</td>
-                            <td>8</td>
-                            <td><span class="inventory-status low-stock">Low Stock</span></td>
-                            <td>
-                                <button class="action-btn edit-btn">Update Stock</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </main>
+<div class="panel">
+    <nav class="tabs" aria-label="Filter">
+        <a href="inventory.php" class="<?php echo $filter === '' ? 'active' : ''; ?>">All</a>
+        <a href="inventory.php?filter=low" class="<?php echo $filter === 'low' ? 'active' : ''; ?>">Low stock <span><?php echo (int)$counts['low']; ?></span></a>
+        <a href="inventory.php?filter=out" class="<?php echo $filter === 'out' ? 'active' : ''; ?>">Sold out <span><?php echo (int)$counts['out_count']; ?></span></a>
+    </nav>
+    <p class="muted small">Stock goes down automatically when an order is placed and back up if it is cancelled.</p>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th></th><th>Product</th><th>Status</th><th class="num">In stock</th><th class="num">Sold (30 days)</th><th>Restock</th><th>Set exact</th></tr></thead>
+            <tbody>
+            <?php if (!$rows): ?><tr><td colspan="7" class="empty-row">Nothing here. All good!</td></tr><?php endif; ?>
+            <?php foreach ($rows as $r): ?>
+                <tr>
+                    <td><img class="thumb" src="<?php echo e(img_url($r['image'])); ?>" alt=""></td>
+                    <td>
+                        <a class="row-title" href="product-form.php?id=<?php echo (int)$r['id']; ?>"><?php echo e($r['name']); ?></a>
+                        <div class="muted small"><?php echo e($r['category_name'] ?? 'No category'); ?><?php echo (int)$r['is_active'] ? '' : ' &middot; hidden'; ?></div>
+                    </td>
+                    <td><?php echo admin_stock_badge((int)$r['stock']); ?></td>
+                    <td class="num"><strong><?php echo (int)$r['stock']; ?></strong></td>
+                    <td class="num"><?php echo (int)$r['sold30']; ?></td>
+                    <td>
+                        <form method="post" class="btn-row" style="flex-wrap: nowrap;">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                            <input type="hidden" name="mode" value="add">
+                            <label class="sr-only" for="add<?php echo (int)$r['id']; ?>">Copies to add to <?php echo e($r['name']); ?></label>
+                            <input type="number" id="add<?php echo (int)$r['id']; ?>" name="amount" value="10" min="1" max="10000" style="width: 80px;">
+                            <button class="btn btn-ghost btn-sm" type="submit">+ Add</button>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="post" class="btn-row" style="flex-wrap: nowrap;">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="id" value="<?php echo (int)$r['id']; ?>">
+                            <input type="hidden" name="mode" value="set">
+                            <label class="sr-only" for="set<?php echo (int)$r['id']; ?>">Exact stock for <?php echo e($r['name']); ?></label>
+                            <input type="number" id="set<?php echo (int)$r['id']; ?>" name="amount" value="<?php echo (int)$r['stock']; ?>" min="0" max="100000" style="width: 80px;">
+                            <button class="btn btn-ghost btn-sm" type="submit">Set</button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
-</body>
-</html>
+</div>
+
+<?php admin_footer(); ?>

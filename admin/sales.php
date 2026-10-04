@@ -1,184 +1,151 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['email'] != 'admin@heartfolio.com') {
-    header("Location: ../login.php");
+require_once __DIR__ . '/../assets/includes/admin-guard.php';
+
+// ---- Date range ----
+$presets = [
+    '7'    => ['Last 7 days',  date('Y-m-d', strtotime('-6 days')),  date('Y-m-d')],
+    '30'   => ['Last 30 days', date('Y-m-d', strtotime('-29 days')), date('Y-m-d')],
+    '90'   => ['Last 90 days', date('Y-m-d', strtotime('-89 days')), date('Y-m-d')],
+    'month'=> ['This month',   date('Y-m-01'),                       date('Y-m-d')],
+    'year' => ['This year',    date('Y-01-01'),                      date('Y-m-d')],
+];
+$range = $_GET['range'] ?? '30';
+if (isset($presets[$range])) {
+    [, $from, $to] = $presets[$range];
+} else {
+    $range = 'custom';
+    $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-d', strtotime('-29 days'));
+    $to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '') ? $_GET['to'] : date('Y-m-d');
+    if ($from > $to) {
+        [$from, $to] = [$to, $from];
+    }
+    // Keep the daily chart readable
+    if ((strtotime($to) - strtotime($from)) / 86400 > 366) {
+        $from = date('Y-m-d', strtotime($to . ' -365 days'));
+    }
+}
+
+$inRange = "o.status <> 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?";
+$p = [$from, $to];
+
+$summary = db_one("SELECT COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue, COALESCE(SUM(o.shipping), 0) AS shipping
+                   FROM orders o WHERE $inRange", $p);
+$itemsSold = (int)db_value("SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE $inRange", $p);
+$customOrders = (int)db_value("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON oi.order_id = o.id WHERE oi.is_custom = 1 AND $inRange", $p);
+$cancelled = (int)db_value("SELECT COUNT(*) FROM orders o WHERE o.status = 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ?", $p);
+$avg = (int)$summary['orders'] ? (float)$summary['revenue'] / (int)$summary['orders'] : 0;
+
+$byProduct = db_all("SELECT oi.product_name, SUM(oi.quantity) AS qty, SUM(oi.quantity * oi.unit_price) AS revenue
+                     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                     WHERE $inRange GROUP BY oi.product_name ORDER BY revenue DESC, qty DESC", $p);
+$byCategory = db_all("SELECT COALESCE(oi.category_name, 'No category') AS name, SUM(oi.quantity) AS qty, SUM(oi.quantity * oi.unit_price) AS revenue
+                      FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                      WHERE $inRange GROUP BY name ORDER BY revenue DESC", $p);
+$byPayment = db_all("SELECT o.payment_method, COUNT(*) AS orders, SUM(o.total) AS revenue
+                     FROM orders o WHERE $inRange GROUP BY o.payment_method ORDER BY revenue DESC", $p);
+$series = admin_daily_series($from, $to);
+
+// ---- CSV download of every order in the range ----
+if (($_GET['export'] ?? '') === 'csv') {
+    $rows = db_all("SELECT o.order_number, o.created_at, o.fullname, o.email, o.phone, o.city, o.payment_method, o.status,
+                           o.subtotal, o.shipping, o.total,
+                           (SELECT SUM(quantity) FROM order_items WHERE order_id = o.id) AS items
+                    FROM orders o WHERE DATE(o.created_at) BETWEEN ? AND ? ORDER BY o.created_at", $p);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="heartfolio-orders-' . $from . '-to-' . $to . '.csv"');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF"); // so Excel reads it as UTF-8
+    fputcsv($out, ['Order', 'Date', 'Customer', 'Email', 'Phone', 'City', 'Payment', 'Status', 'Items', 'Subtotal', 'Delivery', 'Total']);
+    foreach ($rows as $r) {
+        fputcsv($out, [$r['order_number'], $r['created_at'], $r['fullname'], $r['email'], $r['phone'], $r['city'],
+            PAYMENT_METHODS[$r['payment_method']] ?? $r['payment_method'], ORDER_STATUSES[$r['status']] ?? $r['status'],
+            $r['items'], $r['subtotal'], $r['shipping'], $r['total']]);
+    }
+    fclose($out);
     exit();
 }
+
+admin_header('Sales reports', 'sales');
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sales Records - Heartfolio Admin</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
-    <link rel="stylesheet" href="admin.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <div class="admin-layout">
-        <!-- Sidebar -->
-        <aside class="admin-sidebar">
-            <img src="../assets/images/logo.jpg" alt="Heartfolio" style="height: 50px; margin-bottom: 20px; border-radius: 50%;">
-            <h2>Heartfolio Admin</h2>
-            <ul>
-                <li><a href="index.php">Dashboard</a></li>
-                <li><a href="products.php">Products</a></li>
-                <li><a href="orders.php">Orders</a></li>
-                <li><a href="inventory.php">Inventory</a></li>
-                <li><a href="sales.php" class="active">Sales Records</a></li>
-                <li><a href="../index.php">View Website</a></li>
-                <li><a href="../logout.php">Logout</a></li>
-            </ul>
-        </aside>
 
-        <!-- Main Content -->
-        <main class="admin-content">
-            <div class="admin-header">
-                <h1>Sales Records</h1>
-            </div>
+<form class="toolbar" method="get">
+    <nav class="tabs" style="margin: 0; border: 0;" aria-label="Date range">
+        <?php foreach ($presets as $key => [$label]): ?>
+            <a href="sales.php?range=<?php echo $key; ?>" class="<?php echo $range === (string)$key ? 'active' : ''; ?>"><?php echo $label; ?></a>
+        <?php endforeach; ?>
+    </nav>
+    <span class="spacer"></span>
+    <input type="hidden" name="range" value="custom">
+    <label for="from" class="small muted">From</label>
+    <input type="date" id="from" name="from" value="<?php echo e($from); ?>">
+    <label for="to" class="small muted">To</label>
+    <input type="date" id="to" name="to" value="<?php echo e($to); ?>">
+    <button class="btn btn-ghost" type="submit">Apply</button>
+    <a class="btn btn-primary" href="<?php echo e(admin_url('sales.php', ['export' => 'csv', 'range' => $range, 'from' => $from, 'to' => $to])); ?>"><i class="fa-solid fa-download" aria-hidden="true"></i> CSV</a>
+</form>
 
-            <!-- Sales Summary Cards -->
-            <div class="dashboard-cards">
-                <div class="dashboard-card">
-                    <h3>Total Sales</h3>
-                    <div class="number">Rs. 1,45,678</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Total Orders</h3>
-                    <div class="number">156</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Average Order Value</h3>
-                    <div class="number">Rs. 934</div>
-                </div>
-                <div class="dashboard-card">
-                    <h3>This Month</h3>
-                    <div class="number">Rs. 28,450</div>
-                </div>
-            </div>
+<p class="muted small" style="margin-top: -6px;"><?php echo e(nice_date($from)); ?> to <?php echo e(nice_date($to)); ?>. Revenue counts every order except cancelled ones, including delivery charges.</p>
 
-            <!-- Sales by Product -->
-            <div class="dashboard-sections">
-                <div class="dashboard-section">
-                    <h3>Sales by Product</h3>
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Units Sold</th>
-                                <th>Revenue</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Best Friends</td>
-                                <td>45</td>
-                                <td>Rs. 31,455</td>
-                            </tr>
-                            <tr>
-                                <td>Our Story</td>
-                                <td>38</td>
-                                <td>Rs. 26,562</td>
-                            </tr>
-                            <tr>
-                                <td>Family Memories</td>
-                                <td>32</td>
-                                <td>Rs. 22,368</td>
-                            </tr>
-                            <tr>
-                                <td>Birthday Special</td>
-                                <td>28</td>
-                                <td>Rs. 19,572</td>
-                            </tr>
-                            <tr>
-                                <td>Friendship Forever</td>
-                                <td>25</td>
-                                <td>Rs. 17,475</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+<div class="kpis">
+    <div class="kpi"><div class="label">Revenue</div><div class="value"><?php echo price($summary['revenue']); ?></div><div class="sub"><?php echo price($summary['shipping']); ?> of it delivery</div></div>
+    <div class="kpi"><div class="label">Orders</div><div class="value"><?php echo (int)$summary['orders']; ?></div><div class="sub"><?php echo $cancelled; ?> cancelled (not counted)</div></div>
+    <div class="kpi"><div class="label">Average order</div><div class="value"><?php echo price(round($avg)); ?></div><div class="sub">Revenue per order</div></div>
+    <div class="kpi"><div class="label">Magazines sold</div><div class="value"><?php echo $itemsSold; ?></div><div class="sub"><?php echo $customOrders; ?> <?php echo $customOrders === 1 ? 'order' : 'orders'; ?> with custom photos</div></div>
+</div>
 
-                <!-- Recent Sales -->
-                <div class="dashboard-section">
-                    <h3>Recent Sales</h3>
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Order ID</th>
-                                <th>Amount</th>
-                                <th>Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>#HF-2024-001</td>
-                                <td>Rs. 2,197</td>
-                                <td>Sep 22, 2024</td>
-                            </tr>
-                            <tr>
-                                <td>#HF-2024-002</td>
-                                <td>Rs. 699</td>
-                                <td>Sep 21, 2024</td>
-                            </tr>
-                            <tr>
-                                <td>#HF-2024-003</td>
-                                <td>Rs. 1,398</td>
-                                <td>Sep 20, 2024</td>
-                            </tr>
-                            <tr>
-                                <td>#HF-2024-004</td>
-                                <td>Rs. 699</td>
-                                <td>Sep 19, 2024</td>
-                            </tr>
-                            <tr>
-                                <td>#HF-2024-005</td>
-                                <td>Rs. 2,097</td>
-                                <td>Sep 18, 2024</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<section class="panel" style="margin-bottom: 20px;">
+    <h2>Revenue per day</h2>
+    <?php echo admin_revenue_chart($series, 'Hover a bar to see the exact amount'); ?>
+</section>
 
-            <!-- Monthly Sales Chart -->
-            <div class="dashboard-section" style="margin-top: 20px;">
-                <h3>Monthly Sales Overview</h3>
-                <div style="height: 250px; display: flex; align-items: flex-end; justify-content: space-around; padding: 20px;">
-                    <div style="text-align: center;">
-                        <div style="height: 80px; width: 50px; background-color: var(--sand); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">Jan</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 12K</p>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="height: 100px; width: 50px; background-color: var(--sand); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">Feb</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 15K</p>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="height: 60px; width: 50px; background-color: var(--sand); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">Mar</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 9K</p>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="height: 140px; width: 50px; background-color: var(--sand); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">Apr</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 21K</p>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="height: 110px; width: 50px; background-color: var(--sand); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">May</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 16K</p>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="height: 180px; width: 50px; background-color: var(--soft-pink); margin: 0 auto;"></div>
-                        <p style="margin-top: 10px; font-size: 12px;">Jun</p>
-                        <p style="font-size: 11px; color: var(--text-light);">Rs. 28K</p>
-                    </div>
-                </div>
-            </div>
-        </main>
+<div class="grid-2">
+    <section class="panel">
+        <h2>By product</h2>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Product</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Share</th></tr></thead>
+                <tbody>
+                <?php $itemRevenue = array_sum(array_column($byProduct, 'revenue')); ?>
+                <?php if (!$byProduct): ?><tr><td colspan="4" class="empty-row">No sales in this period.</td></tr><?php endif; ?>
+                <?php foreach ($byProduct as $r): ?>
+                    <tr>
+                        <td><?php echo e($r['product_name']); ?></td>
+                        <td class="num"><?php echo (int)$r['qty']; ?></td>
+                        <td class="num"><?php echo price($r['revenue']); ?></td>
+                        <td class="num"><?php echo $itemRevenue > 0 ? round($r['revenue'] / $itemRevenue * 100) : 0; ?>%</td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="stack">
+        <section class="panel">
+            <h2>By category</h2>
+            <table class="table">
+                <thead><tr><th>Category</th><th class="num">Sold</th><th class="num">Revenue</th></tr></thead>
+                <tbody>
+                <?php if (!$byCategory): ?><tr><td colspan="3" class="empty-row">No sales in this period.</td></tr><?php endif; ?>
+                <?php foreach ($byCategory as $r): ?>
+                    <tr><td><?php echo e($r['name']); ?></td><td class="num"><?php echo (int)$r['qty']; ?></td><td class="num"><?php echo price($r['revenue']); ?></td></tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </section>
+        <section class="panel">
+            <h2>By payment method</h2>
+            <table class="table">
+                <thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Revenue</th></tr></thead>
+                <tbody>
+                <?php if (!$byPayment): ?><tr><td colspan="3" class="empty-row">No sales in this period.</td></tr><?php endif; ?>
+                <?php foreach ($byPayment as $r): ?>
+                    <tr><td><?php echo e(PAYMENT_METHODS[$r['payment_method']] ?? $r['payment_method']); ?></td><td class="num"><?php echo (int)$r['orders']; ?></td><td class="num"><?php echo price($r['revenue']); ?></td></tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </section>
     </div>
-</body>
-</html>
+</div>
+
+<?php admin_footer(); ?>

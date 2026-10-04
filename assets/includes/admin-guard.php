@@ -1,36 +1,21 @@
 <?php
 /*
- * Put this at the very top of every admin page:
+ * First line of every admin page:
  *     require_once __DIR__ . '/../assets/includes/admin-guard.php';
- *
- * It lets the page load only for a logged-in user whose role is "admin".
- * The role is checked in the database on every page, so if an admin is
- * changed back to a customer, they lose access straight away.
- * It also gives the page a ready database connection in $conn.
+ * Lets the page load only for a logged-in admin. The role is read from the
+ * database on every request, so removing someone's admin role takes effect
+ * immediately.
  */
+require_once __DIR__ . '/bootstrap.php';
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+$adminUser = current_user();
+if (!$adminUser) {
+    flash('info', 'Log in with an admin account to open the admin panel.');
+    redirect('../login.php?next=' . urlencode('admin/' . basename($_SERVER['SCRIPT_NAME'])));
+}
+if ($adminUser['role'] !== 'admin') {
+    flash('error', 'That page is for Heartfolio staff only.');
+    redirect('../index.php');
 }
 
-require_once __DIR__ . '/../../db.php';
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../login.php?error=' . urlencode('Log in to open the admin panel'));
-    exit();
-}
-
-$guardStmt = $conn->prepare('SELECT role FROM users WHERE id = ? LIMIT 1');
-$guardStmt->bind_param('i', $_SESSION['user_id']);
-$guardStmt->execute();
-$guardUser = $guardStmt->get_result()->fetch_assoc();
-$guardStmt->close();
-
-if (!$guardUser || $guardUser['role'] !== 'admin') {
-    // Logged in, but not an admin: send them to the shop
-    header('Location: ../index.php');
-    exit();
-}
-
-$_SESSION['role'] = 'admin';
-unset($guardStmt, $guardUser);
+require_once dirname(__DIR__, 2) . '/admin/partials/layout.php';

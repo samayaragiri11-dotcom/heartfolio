@@ -1,189 +1,138 @@
-// Heartfolio Main JavaScript
+/*
+ * Heartfolio storefront script.
+ * Everything works without JavaScript; this just makes it smoother.
+ */
+(function () {
+    'use strict';
 
-// Cart functionality
-let cart = [];
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-// function addToCart(productId, productName, price, quantity = 1) {
-//     const existingItem = cart.find(item => item.id === productId);
-    
-//     if (existingItem) {
-//         existingItem.quantity += quantity;
-//     } else {
-//         cart.push({
-//             id: productId,
-//             name: productName,
-//             price: price,
-//             quantity: quantity
-//         });
-//     }
-    
-//     updateCartCount();
-//     showNotification('Product added to cart!');
-// }
+    /* ---------- Toast ---------- */
+    var toastTimer;
+    function toast(message, opts) {
+        opts = opts || {};
+        var el = document.getElementById('toast');
+        if (!el) return;
+        el.className = 'toast' + (opts.error ? ' error' : '');
+        el.textContent = message;
+        if (opts.link) {
+            var a = document.createElement('a');
+            a.href = opts.link.href;
+            a.textContent = opts.link.text;
+            el.appendChild(a);
+        }
+        requestAnimationFrame(function () { el.classList.add('show'); });
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { el.classList.remove('show'); }, opts.error ? 4500 : 3200);
+    }
+    window.hfToast = toast;
 
-function removeFromCart(productId) {
-    cart = cart.filter(item => item.id !== productId);
-    updateCartCount();
-    updateCartDisplay();
-}
-
-
-function updateCartDisplay() {
-    // This would update the cart page display
-    // In a real application, this would refresh the cart table
-}
-
-function showNotification(message) {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.style.position = 'fixed';
-    notification.style.top = '20px';
-    notification.style.right = '20px';
-    notification.style.backgroundColor = '#3F352D';
-    notification.style.color = '#FAF5ED';
-    notification.style.padding = '15px 25px';
-    notification.style.borderRadius = '5px';
-    notification.style.zIndex = '9999';
-    notification.style.boxShadow = '0 5px 15px rgba(0,0,0,0.2)';
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    // Remove after 3 seconds
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
-}
-
-// Product image gallery
-function changeImage(thumbnail) {
-    const mainImage = document.getElementById('main-image');
-    if (mainImage) {
-        mainImage.src = thumbnail.src;
-        
-        // Update active class
-        document.querySelectorAll('.product-thumbnails img').forEach(img => {
-            img.classList.remove('active');
+    function setCartCount(n) {
+        document.querySelectorAll('[data-cart-count]').forEach(function (el) {
+            el.textContent = n;
+            el.setAttribute('data-count', n);
+            el.classList.remove('bump');
+            void el.offsetWidth;
+            el.classList.add('bump');
         });
-        thumbnail.classList.add('active');
     }
-}
+    window.hfSetCartCount = setCartCount;
 
-// Quantity selector
-function increaseQuantity() {
-    const input = document.getElementById('quantity');
-    if (input) {
-        input.value = parseInt(input.value) + 1;
+    /* ---------- Mobile menu & search ---------- */
+    var navBtn = document.querySelector('[data-nav-toggle]');
+    var nav = document.getElementById('main-nav');
+    if (navBtn && nav) {
+        navBtn.addEventListener('click', function () {
+            var open = nav.classList.toggle('open');
+            navBtn.setAttribute('aria-expanded', open);
+            navBtn.innerHTML = open ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>' : '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
+        });
     }
-}
 
-function decreaseQuantity() {
-    const input = document.getElementById('quantity');
-    if (input && parseInt(input.value) > 1) {
-        input.value = parseInt(input.value) - 1;
+    var searchBtn = document.querySelector('[data-search-toggle]');
+    var searchBox = document.getElementById('header-search');
+    if (searchBtn && searchBox) {
+        searchBtn.addEventListener('click', function () {
+            var open = searchBox.classList.toggle('open');
+            searchBtn.setAttribute('aria-expanded', open);
+            if (open) searchBox.querySelector('input').focus();
+        });
     }
-}
 
-// Form validation
-function validateForm(formId) {
-    const form = document.getElementById(formId);
-    if (!form) return false;
-    
-    const inputs = form.querySelectorAll('input[required], textarea[required], select[required]');
-    let isValid = true;
-    
-    inputs.forEach(input => {
-        if (!input.value.trim()) {
-            isValid = false;
-            input.style.borderColor = '#D98291';
-        } else {
-            input.style.borderColor = '#DCC7AD';
-        }
+    /* ---------- Quantity steppers ---------- */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-step]');
+        if (!btn) return;
+        var input = btn.parentElement.querySelector('input');
+        var min = parseInt(input.min, 10) || 1;
+        var max = parseInt(input.max, 10) || 99;
+        var next = Math.min(max, Math.max(min, (parseInt(input.value, 10) || min) + parseInt(btn.getAttribute('data-step'), 10)));
+        if (next === parseInt(input.value, 10)) return;
+        input.value = next;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    
-    return isValid;
-}
 
-// Smooth scroll for navigation links
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-            target.scrollIntoView({
-                behavior: 'smooth'
-            });
-        }
-    });
-});
-
-// Mobile menu toggle (for responsive design)
-function toggleMobileMenu() {
-    const navLinks = document.querySelector('.nav-links');
-    if (navLinks) {
-        navLinks.classList.toggle('active');
-    }
-}
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    updateCartCount();
-    
-    // Add event listeners for forms
-    const forms = document.querySelectorAll('form');
-    forms.forEach(form => {
-        form.addEventListener('submit', function(e) {
-            if (!validateForm(form.id)) {
-                e.preventDefault();
-                showNotification('Please fill in all required fields');
-            }
+    // Cart page: changing a quantity submits its form automatically
+    document.querySelectorAll('[data-autosubmit]').forEach(function (form) {
+        var timer;
+        form.addEventListener('change', function () {
+            clearTimeout(timer);
+            timer = setTimeout(function () { form.submit(); }, 450);
         });
     });
-});
 
-// Search functionality
-function searchProducts(query) {
-    // In a real application, this would make an AJAX call to search products
-    console.log('Searching for:', query);
-}
+    /* ---------- Show / hide password ---------- */
+    document.querySelectorAll('[data-pw-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = btn.parentElement.querySelector('input');
+            var show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+            btn.innerHTML = '<i class="fa-regular ' + (show ? 'fa-eye-slash' : 'fa-eye') + '" aria-hidden="true"></i>';
+        });
+    });
 
-// Category filter
-function filterByCategory(category) {
-    // In a real application, this would filter products by category
-    console.log('Filtering by category:', category);
-}
+    /* ---------- Add to cart without leaving the page ---------- */
+    document.querySelectorAll('form[data-ajax-cart]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            var submitter = e.submitter;
+            // "Buy now" goes straight to checkout, so let it submit normally
+            if (submitter && submitter.name === 'buy_now') return;
+            e.preventDefault();
+            var button = form.querySelector('[type="submit"]');
+            button.disabled = true;
+            fetch(form.getAttribute('action'), {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { 'X-Requested-With': 'fetch', 'X-CSRF-Token': csrf }
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok) {
+                        setCartCount(data.count);
+                        toast(data.message, { link: { href: 'cart.php', text: 'View cart' } });
+                    } else {
+                        toast(data.error || 'Something went wrong.', { error: true });
+                    }
+                })
+                .catch(function () { form.submit(); })
+                .finally(function () { button.disabled = false; });
+        });
+    });
 
-// Sort products
-function sortProducts(sortBy) {
-    // In a real application, this would sort products
-    console.log('Sorting by:', sortBy);
-}
+    /* ---------- Product gallery ---------- */
+    var main = document.getElementById('pd-main-img');
+    document.querySelectorAll('[data-thumb]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            main.src = btn.getAttribute('data-thumb');
+            document.querySelectorAll('[data-thumb]').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+        });
+    });
 
-// Admin dashboard charts (simple implementation)
-function initCharts() {
-    // This would initialize chart libraries in a real application
-    console.log('Charts initialized');
-}
-
-// Order status update (admin)
-function updateOrderStatus(orderId, newStatus) {
-    // In a real application, this would make an AJAX call to update order status
-    console.log('Updating order', orderId, 'to', newStatus);
-    showNotification('Order status updated');
-}
-
-// Stock update (admin)
-function updateStock(productId, newStock) {
-    // In a real application, this would make an AJAX call to update stock
-    console.log('Updating stock for product', productId, 'to', newStock);
-    showNotification('Stock updated');
-}
-
-// Product delete (admin)
-function deleteProduct(productId) {
-    if (confirm('Are you sure you want to delete this product?')) {
-        // In a real application, this would make an AJAX call to delete the product
-        console.log('Deleting product', productId);
-        showNotification('Product deleted');
-    }
-}
+    /* ---------- Confirm before destructive actions ---------- */
+    document.addEventListener('submit', function (e) {
+        var msg = e.target.getAttribute('data-confirm');
+        if (msg && !confirm(msg)) e.preventDefault();
+    });
+})();

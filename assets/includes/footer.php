@@ -1,44 +1,36 @@
-    <script src="assets/js/cart.js"></script>
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <img src="assets/images/logo.jpg" alt="Heartfolio" style="height: 60px; margin-bottom: 15px; border-radius: 50%;">
-                    <p>Create personalized magazines that tell your story beautifully.</p>
-                </div>
-                <div class="footer-section">
-                    <h3>Quick Links</h3>
-                    <ul>
-                        <li><a href="index.php">Home</a></li>
-                        <li><a href="shop.php">Shop</a></li>
-                        <li><a href="templates.php">Templates</a></li>
-                        <li><a href="contact.php">Contact</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>Categories</h3>
-                    <ul>
-                        <li><a href="shop.php?category=friendship">Friendship</a></li>
-                        <li><a href="shop.php?category=birthday">Birthday</a></li>
-                        <li><a href="shop.php?category=love">Love & Couple</a></li>
-                        <li><a href="shop.php?category=family">Family</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>Contact</h3>
-                    <ul>
-                        <li><i class="fas fa-envelope"></i> heartfolioofficial@gmail.com </li>
-                        <li><i class="fas fa-phone"></i> +977 9763695121</li>
-                        <li><i class="fas fa-map-marker-alt"></i> Kathmandu, Nepal</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2024 Heartfolio. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
+<?php
+$footerCats = array_slice(categories_all(), 0, 5);
+?>
+</main>
 
-    <script src="assets/js/main.js"></script>
+<footer class="site-footer">
+    <div class="wrap footer-grid">
+        <div>
+            <div class="footer-brand">Heartfolio</div>
+            <p>Personalized magazines filled with your own photos and words, printed on premium paper and delivered to your door.</p>
+        </div>
+        <div>
+            <h4>Shop</h4>
+            <ul>
+                <li><a href="shop.php">All magazines</a></li>
+                <?php foreach ($footerCats as $c): ?>
+                    <li><a href="shop.php?category=<?php echo e($c['slug']); ?>"><?php echo e($c['name']); ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <div>
+            <h4>Help</h4>
+            <ul>
+                <li><a href="account.php?tab=orders">Track an order</a></li>
+                <li><a href="account.php">My account</a></li>
+                <li><a href="cart.php">Cart</a></li>
+                <li><a href="contact.php">Contact us</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="wrap footer-bottom">&copy; <?php echo date('Y'); ?> Heartfolio. Made with love in Nepal.</div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

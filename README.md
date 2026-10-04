@@ -1,216 +1,78 @@
-# Heartfolio - Custom Magazine Business
+# Heartfolio
 
-A complete e-commerce website for Heartfolio, a custom magazine business that sells personalized magazines for various occasions including friendship, birthday, love & couple, family, anniversary, travel, and other special occasions.
+An online shop for personalized magazines. Customers browse designs, upload their own photos and words, and order. The shop owner runs everything from an admin panel. Built with PHP and MySQL on XAMPP.
 
-## Features
+## Set up (5 minutes)
 
-### Customer Features
-- **Home Page**: Hero section with featured products and feature boxes
-- **Shop Page**: Product listing with category filters and sorting options
-- **Product Details**: Detailed product view with image gallery and quantity selector
-- **Templates Page**: Browse available magazine templates
-- **Shopping Cart**: Add/remove items, update quantities
-- **Checkout**: Complete order with delivery information and payment options
-- **Order Confirmation**: View order details after successful purchase
-- **Customer Account**: Profile management and order history
-- **User Authentication**: Login and signup functionality
+1. Copy the project into `C:\xampp\htdocs\` (for example `C:\xampp\htdocs\projectheartfolio`).
+2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
+3. Open `http://localhost/projectheartfolio/setup.php` once.
+   It creates the database and tables, adds the 12 magazines, and creates an admin account. It never deletes existing accounts or orders, and it is safe to run again.
+4. Log in at `http://localhost/projectheartfolio/login.php`:
+   - Email: `admin@heartfolio.com`
+   - Password: `password123` (only if setup created the account; change it under **My password**)
 
-### Admin Features
-- **Dashboard**: Overview of total products, orders, customers, and sales
-- **Product Management**: Add, edit, delete products with image upload
-- **Order Management**: View and update order statuses
-- **Inventory Management**: Track stock levels and update inventory
-- **Sales Records**: View sales analytics and reports
+If MySQL uses a different user or password, edit `config.php`.
 
-## Technology Stack
+## What customers can do
 
-- **Frontend**: HTML, CSS, JavaScript
-- **Backend**: PHP
-- **Database**: MySQL
-- **Server**: XAMPP (Apache)
+- Browse the shop by occasion, search, sort and filter to in-stock items
+- View a magazine with its photos, specs, stock level and reviews
+- **Customize** any magazine: a cover photo, up to 12 page photos, a title, names and a message, with a live cover preview
+- Add to cart as a guest; the cart is saved in the database and follows them after logging in
+- Check out with delivery details and Cash on Delivery, eSewa or Khalti (recorded on the order; online payment isn't connected)
+- Track orders with a status timeline, cancel while pending, and review magazines after delivery
+- Manage their details and password; contact the shop; request a password reset
 
-## Color Theme
+## What the admin can do
 
-- Cream: #FAF5ED
-- Warm Beige: #F1E6D6
-- Sand: #DCC7AD
-- Light Taupe: #B8A895
-- Dark Brown: #3F352D
-- Soft Pink: #D98291
+| Page | What it's for |
+|---|---|
+| Dashboard | Revenue, orders, customers, 14-day revenue chart, latest orders, low stock, best sellers |
+| Orders | Filter by status, date or customer; open an order to see customer photos, print a packing slip and move it through Pending > Processing > Shipped > Delivered |
+| Products | Add, edit, hide, feature or delete products, with cover and gallery image uploads |
+| Categories | Add, rename, reorder and delete occasions |
+| Inventory | See low and sold-out stock; restock or set exact amounts |
+| Sales reports | Revenue, orders, average order, sales by product, category and payment method, CSV export |
+| Customers | Order history and spend per customer; set a temporary password; grant admin access |
+| Messages | Contact form messages and password reset requests |
+| Reviews | Remove reviews |
 
-## Installation Instructions
+Stock goes down when an order is placed and back up if it is cancelled. Prices are always read from the database at checkout, never from the browser.
 
-### Prerequisites
-- XAMPP (or any PHP/MySQL server)
-- Web browser (Chrome, Firefox, etc.)
-
-### Step 1: Install XAMPP
-1. Download and install XAMPP from https://www.apachefriends.org/
-2. Start Apache and MySQL services from XAMPP Control Panel
-
-### Step 2: Setup Database
-1. Open phpMyAdmin (http://localhost/phpmyadmin)
-2. Create a new database named `heartfolio`
-3. Import the SQL file from `database/heartfolio.sql`
-4. Verify that the tables are created successfully
-
-### Step 3: Configure Project
-1. Copy the `projectheartfolio` folder to `C:\xampp\htdocs\`
-2. The project should be accessible at `http://localhost/projectheartfolio`
-
-### Step 4: Update Database Configuration (if needed)
-If your MySQL credentials are different from default:
-- Open `assets/includes/db.php`
-- Update the following variables:
-  ```php
-  $host = 'localhost';
-  $username = 'root';  // Your MySQL username
-  $password = '';      // Your MySQL password
-  $database = 'heartfolio';
-  ```
-
-## Default Admin Credentials
-
-- **Email**: admin@heartfolio.com
-- **Password**: password123
-
-**Note**: For security, change the default admin password after first login.
-
-## Project Structure
+## Project layout
 
 ```
-projectheartfolio/
-├── admin/
-│   ├── index.php              # Admin Dashboard
-│   ├── products.php           # Product Management
-│   ├── add-product.php        # Add New Product
-│   ├── orders.php             # Order Management
-│   ├── inventory.php          # Inventory Management
-│   ├── sales.php              # Sales Records
-│   ├── admin.css              # Admin-specific styles
-│   └── add-product-process.php # Product form processing
-├── assets/
-│   ├── css/
-│   │   └── style.css          # Main stylesheet
-│   ├── js/
-│   │   └── main.js            # Main JavaScript file
-│   ├── images/                # Product images (add your images here)
-│   ├── includes/
-│   │   ├── navbar.php        # Navigation bar
-│   │   ├── footer.php        # Footer
-│   │   └── db.php            # Database connection
-│   └── fonts/                # Custom fonts (if any)
-├── database/
-│   └── heartfolio.sql        # Database schema
-├── pages/
-│   └── (additional pages if needed)
-├── index.php                 # Home page
-├── login.php                 # Login page
-├── signup.php                # Sign up page
-├── shop.php                  # Shop/Products page
-├── product-details.php       # Product details page
-├── templates.php             # Templates page
-├── cart.php                  # Shopping cart
-├── checkout.php              # Checkout page
-├── order-confirmation.php    # Order confirmation
-├── account.php               # Customer account
-├── contact.php               # Contact page
-├── login-process.php         # Login form processing
-├── signup-process.php        # Signup form processing
-├── place-order.php           # Order placement
-├── logout.php                # Logout functionality
-└── README.md                 # This file
+config.php              database settings
+db.php                  database connection
+setup.php               one-click install / upgrade
+index.php, shop.php, templates.php, product-details.php, customize.php,
+cart.php, checkout.php, order.php, account.php, contact.php,
+login.php, signup.php, forgot-password.php     customer pages
+cart-action.php, customize-action.php, order-action.php,
+review-action.php, login_process.php, signup-process.php   form handlers
+photo.php               shows a customer's photo only to them or an admin
+admin/                  admin panel (admin.css, partials/layout.php, one file per page)
+assets/includes/        bootstrap, helpers, cart and order logic, header, footer
+assets/css/style.css    storefront styles
+assets/js/main.js       storefront script (menu, add to cart, quantity, toasts)
+assets/images/          the product images that ship with the site
+uploads/                created by setup: admin product images and customer photos (not in git)
 ```
 
-## Adding Product Images
+## Database tables
 
-1. Place your product images in the `assets/images/` folder
-2. Recommended image size: 800x800 pixels
-3. Use the following naming convention:
-   - friendship-1.jpg, friendship-2.jpg, etc.
-   - love-1.jpg, love-2.jpg, etc.
-   - birthday-1.jpg, etc.
-4. Update the database or use the admin panel to add products with image paths
+`users`, `categories`, `products`, `product_images`, `cart_items`, `custom_photos`, `orders`, `order_items`, `order_status_history`, `reviews`, `messages`. The full definitions are in `setup.php`.
 
-## Usage
+## Security notes
 
-### For Customers
-1. Visit `http://localhost/projectheartfolio`
-2. Browse products on the Shop page
-3. View product details and add to cart
-4. Proceed to checkout
-5. Complete order with delivery information
-6. View order history in account section
+- Passwords are hashed with `password_hash`; repeated failed logins are slowed down.
+- Every query uses prepared statements.
+- Every form has a CSRF token.
+- Admin pages check the role in the database on every request.
+- Uploads are checked by their real file type, renamed randomly, and stored where scripts can't run. Customer photos can only be opened through `photo.php` by their owner or an admin.
 
-### For Admin
-1. Login at `http://localhost/projectheartfolio/login.php` with admin credentials
-2. Access admin dashboard at `http://localhost/projectheartfolio/admin/`
-3. Manage products, orders, inventory, and view sales records
+## Limits
 
-## Customization
-
-### Changing Prices
-- Update prices in the database via phpMyAdmin
-- Or use the Admin Product Management panel
-
-### Adding New Categories
-- Update the category dropdown in `admin/add-product.php`
-- Update the category filter in `shop.php`
-
-### Modifying Color Theme
-- Edit the CSS variables in `assets/css/style.css`:
-  ```css
-  :root {
-      --cream: #FAF5ED;
-      --warm-beige: #F1E6D6;
-      --sand: #DCC7AD;
-      --light-taupe: #B8A895;
-      --dark-brown: #3F352D;
-      --soft-pink: #D98291;
-  }
-  ```
-
-## Important Notes
-
-- This project is designed for educational purposes (BCA project)
-- No magazine customization editor is included (as per requirements)
-- Customers can only browse and purchase available magazine templates
-- Admin manages all business operations through the dashboard
-- The website uses session-based authentication
-- Images need to be added manually to the `assets/images/` folder
-
-## Troubleshooting
-
-### Database Connection Error
-- Ensure MySQL is running in XAMPP
-- Check database credentials in `assets/includes/db.php`
-- Verify the database name is `heartfolio`
-
-### Images Not Displaying
-- Check that images are in the correct folder: `assets/images/`
-- Verify image file names match the database entries
-- Check file permissions
-
-### PHP Errors
-- Ensure PHP is enabled in XAMPP
-- Check PHP error logs in XAMPP
-- Verify file permissions
-
-## Future Enhancements
-
-- Email notifications for orders
-- Payment gateway integration (eSewa, Khalti)
-- Advanced search functionality
-- Product reviews and ratings
-- Wishlist feature
-- Discount coupon system
-- Advanced analytics dashboard
-
-## License
-
-This project is created for educational purposes.
-
-## Credits
-
-Heartfolio - Custom Magazine Business
-BCA Project 2024
+- XAMPP can't send email, so password resets go to the admin's Messages page instead of an emailed link.
+- eSewa and Khalti are recorded as the chosen method; no payment gateway is connected.

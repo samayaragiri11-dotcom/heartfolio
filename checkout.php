@@ -1,145 +1,201 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+require_once 'assets/includes/bootstrap.php';
+$user = require_login();
+
+$items = cart_items();
+if (!$items) {
+    flash('info', 'Your cart is empty.');
+    redirect('cart.php');
 }
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit();
+
+// Pre-fill from the account and the last order's address
+$last = db_one('SELECT phone, address, city FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 1', [(int)$user['id']]);
+$form = [
+    'fullname' => $user['fullname'],
+    'email'    => $user['email'],
+    'phone'    => $last['phone'] ?? $user['phone'],
+    'address'  => $last['address'] ?? '',
+    'city'     => $last['city'] ?? '',
+    'notes'    => '',
+    'payment'  => 'cod',
+];
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    foreach (['fullname', 'email', 'phone', 'address', 'city', 'notes'] as $f) {
+        $form[$f] = trim($_POST[$f] ?? '');
+    }
+    $form['payment'] = $_POST['payment'] ?? 'cod';
+
+    if ($form['fullname'] === '' || mb_strlen($form['fullname']) > 100) $errors['fullname'] = 'Enter your full name.';
+    if (!filter_var($form['email'], FILTER_VALIDATE_EMAIL))               $errors['email'] = 'Enter a valid email address.';
+    if (!preg_match('/^[0-9+\- ]{7,20}$/', $form['phone']))                $errors['phone'] = 'Enter a valid phone number.';
+    if ($form['address'] === '' || mb_strlen($form['address']) > 255)     $errors['address'] = 'Enter your delivery address.';
+    if ($form['city'] === '' || mb_strlen($form['city']) > 80)            $errors['city'] = 'Enter your city.';
+    if (mb_strlen($form['notes']) > 500)                                  $errors['notes'] = 'Keep delivery notes under 500 characters.';
+    if (!isset(PAYMENT_METHODS[$form['payment']]))                        $errors['payment'] = 'Choose a payment method.';
+
+    if (!$errors) {
+        $conn = db();
+        try {
+            $conn->begin_transaction();
+
+            // Lock the products so two people can't buy the last copy at once
+            $needed = [];
+            foreach ($items as $i) {
+                $needed[(int)$i['product_id']] = ($needed[(int)$i['product_id']] ?? 0) + (int)$i['quantity'];
+            }
+            $ids = implode(',', array_map('intval', array_keys($needed)));
+            $live = [];
+            foreach ($conn->query("SELECT id, name, price, image, stock, is_active FROM products WHERE id IN ($ids) FOR UPDATE")->fetch_all(MYSQLI_ASSOC) as $p) {
+                $live[(int)$p['id']] = $p;
+            }
+            foreach ($needed as $productId => $qty) {
+                $p = $live[$productId] ?? null;
+                if (!$p || !(int)$p['is_active']) {
+                    throw new RuntimeException('A magazine in your cart is no longer sold. Please remove it from your cart.');
+                }
+                if ((int)$p['stock'] < $qty) {
+                    throw new RuntimeException('Only ' . (int)$p['stock'] . ' ' . $p['name'] . ' left. Please update your cart.');
+                }
+            }
+
+            // Prices always come from the database, never from the browser
+            $subtotal = 0.0;
+            foreach ($items as $i) {
+                $subtotal += (float)$live[(int)$i['product_id']]['price'] * (int)$i['quantity'];
+            }
+            $shipping = SHIPPING_FEE;
+            $total    = $subtotal + $shipping;
+            $number   = new_order_number();
+
+            $orderId = db_exec('INSERT INTO orders (order_number, user_id, fullname, email, phone, address, city, notes, payment_method, subtotal, shipping, total)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$number, (int)$user['id'], $form['fullname'], $form['email'], $form['phone'], $form['address'], $form['city'],
+                 $form['notes'] !== '' ? $form['notes'] : null, $form['payment'], $subtotal, (float)$shipping, $total]);
+
+            foreach ($items as $i) {
+                $p = $live[(int)$i['product_id']];
+                $orderItemId = db_exec('INSERT INTO order_items (order_id, product_id, product_name, product_image, category_name, unit_price, quantity, is_custom, custom_title, custom_names, custom_message)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [$orderId, (int)$p['id'], $p['name'], $p['image'], $i['category_name'], (float)$p['price'], (int)$i['quantity'],
+                     (int)$i['is_custom'], $i['custom_title'], $i['custom_names'], $i['custom_message']]);
+                // The customer's photos now belong to the order
+                db_exec('UPDATE custom_photos SET order_item_id = ?, cart_item_id = NULL WHERE cart_item_id = ?', [$orderItemId, (int)$i['id']]);
+            }
+
+            foreach ($needed as $productId => $qty) {
+                db_exec('UPDATE products SET stock = stock - ? WHERE id = ?', [$qty, $productId]);
+            }
+
+            db_exec("INSERT INTO order_status_history (order_id, status, note) VALUES (?, 'pending', 'Order placed')", [$orderId]);
+            db_exec('DELETE FROM cart_items WHERE user_id = ?', [(int)$user['id']]);
+
+            $conn->commit();
+            redirect('order.php?n=' . urlencode($number) . '&placed=1');
+        } catch (RuntimeException $e) {
+            $conn->rollback();
+            flash('error', $e->getMessage());
+            redirect('cart.php');
+        } catch (mysqli_sql_exception $e) {
+            $conn->rollback();
+            error_log('Checkout failed: ' . $e->getMessage());
+            $errors['general'] = 'Your order could not be placed. Please try again.';
+        }
+    }
 }
-$prefillName  = $_SESSION['fullname'] ?? '';
-$prefillEmail = $_SESSION['email'] ?? '';
+
+$totals = cart_totals($items);
+$pageTitle = 'Checkout';
 include 'assets/includes/navbar.php';
+
+function field_error(array $errors, string $key): string {
+    return isset($errors[$key]) ? '<p class="hint" style="color: var(--bad-ink);">' . e($errors[$key]) . '</p>' : '';
+}
 ?>
 
-<div class="container checkout-page">
-    <div class="section-title">
-        <h2>Checkout</h2>
-        <p>Complete your order</p>
-    </div>
+<div class="wrap page">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="cart.php">Cart</a> / Checkout</nav>
+    <div class="page-head"><h1>Checkout</h1></div>
+    <?php echo flash_render(); ?>
+    <?php if ($errors): ?>
+        <div class="alert alert-error" style="margin-bottom: 20px;"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+            <span><?php echo e($errors['general'] ?? 'Please fix the highlighted fields.'); ?></span></div>
+    <?php endif; ?>
 
-    <div class="checkout-grid">
-        <!-- Checkout Form -->
-        <div class="checkout-form">
-            <h3>Delivery Information</h3>
-            <form id="checkout-form">
-                <div class="form-group">
-                    <label for="fullname">Full Name</label>
-                    <input type="text" id="fullname" name="fullname" value="<?php echo htmlspecialchars($prefillName); ?>" required>
+    <form method="post" class="two-col" novalidate>
+        <?php echo csrf_field(); ?>
+        <div class="card">
+            <h2 style="font-size: 1.4rem;">Delivery details</h2>
+            <div class="field-row">
+                <div class="field">
+                    <label for="fullname">Full name</label>
+                    <input type="text" id="fullname" name="fullname" value="<?php echo e($form['fullname']); ?>" required autocomplete="name">
+                    <?php echo field_error($errors, 'fullname'); ?>
                 </div>
-                <div class="form-group">
-                    <label for="phone">Phone Number</label>
-                    <input type="tel" id="phone" name="phone" placeholder="98XXXXXXXX"
-                           pattern="[0-9]{10}" title="Enter a 10-digit phone number" required>
+                <div class="field">
+                    <label for="phone">Phone</label>
+                    <input type="tel" id="phone" name="phone" value="<?php echo e($form['phone']); ?>" required autocomplete="tel" placeholder="98XXXXXXXX">
+                    <?php echo field_error($errors, 'phone'); ?>
                 </div>
-                <div class="form-group">
-                    <label for="email">Email Address</label>
-                    <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($prefillEmail); ?>" required>
-                </div>
-                <div class="form-group">
-                    <label for="address">Address</label>
-                    <textarea id="address" name="address" rows="3" required></textarea>
-                </div>
-                <div class="form-group">
+            </div>
+            <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" value="<?php echo e($form['email']); ?>" required autocomplete="email">
+                <?php echo field_error($errors, 'email'); ?>
+            </div>
+            <div class="field">
+                <label for="address">Street address</label>
+                <input type="text" id="address" name="address" value="<?php echo e($form['address']); ?>" required autocomplete="street-address" placeholder="House no., street, area">
+                <?php echo field_error($errors, 'address'); ?>
+            </div>
+            <div class="field-row">
+                <div class="field">
                     <label for="city">City</label>
-                    <input type="text" id="city" name="city" required>
+                    <input type="text" id="city" name="city" value="<?php echo e($form['city']); ?>" required autocomplete="address-level2">
+                    <?php echo field_error($errors, 'city'); ?>
                 </div>
-
-                <h3 style="margin-top: 30px;">Payment Method</h3>
-                <div class="payment-methods">
-                    <label>
-                        <input type="radio" name="payment_method" value="cod" checked>
-                        Cash on Delivery
-                    </label>
-                    <label>
-                        <input type="radio" name="payment_method" value="esewa">
-                        eSewa
-                    </label>
-                    <label>
-                        <input type="radio" name="payment_method" value="khalti">
-                        Khalti
-                    </label>
+                <div class="field">
+                    <label for="notes">Delivery notes <span class="muted">(optional)</span></label>
+                    <input type="text" id="notes" name="notes" value="<?php echo e($form['notes']); ?>" maxlength="500" placeholder="e.g. call before arriving">
+                    <?php echo field_error($errors, 'notes'); ?>
                 </div>
+            </div>
 
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">Place Order</button>
-            </form>
+            <h2 style="font-size: 1.4rem; margin-top: 12px;">Payment</h2>
+            <?php foreach (PAYMENT_METHODS as $key => $label): ?>
+                <label class="choice">
+                    <input type="radio" name="payment" value="<?php echo $key; ?>" <?php echo $form['payment'] === $key ? 'checked' : ''; ?>>
+                    <span><?php echo e($label); ?>
+                        <?php if ($key !== 'cod'): ?><span class="muted small" style="display: block; font-weight: 400;">We'll send payment details after confirming your order.</span><?php endif; ?>
+                    </span>
+                </label>
+            <?php endforeach; ?>
+            <?php echo field_error($errors, 'payment'); ?>
         </div>
 
-        <!-- Order Summary -->
-        <div class="checkout-summary">
-            <h3>Order Summary</h3>
-            <div id="summary-items"></div>
-            <div class="checkout-summary-item">
-                <span>Subtotal</span>
-                <span id="subtotal">Rs. 0</span>
+        <aside class="card">
+            <h3>Your order</h3>
+            <div class="mini-items">
+                <?php foreach ($items as $i): ?>
+                    <div class="mini-item">
+                        <img src="<?php echo e($i['cover_photo_id'] ? 'photo.php?id=' . (int)$i['cover_photo_id'] : img_url($i['image'])); ?>" alt="">
+                        <div>
+                            <?php echo e($i['name']); ?> &times; <?php echo (int)$i['quantity']; ?>
+                            <?php if ((int)$i['is_custom']): ?><small>Customized: <?php echo e(custom_summary($i)); ?></small><?php endif; ?>
+                        </div>
+                        <strong><?php echo price($i['line_total']); ?></strong>
+                    </div>
+                <?php endforeach; ?>
             </div>
-            <div class="checkout-summary-item">
-                <span>Shipping</span>
-                <span id="shipping">Rs. 0</span>
-            </div>
-            <div class="checkout-summary-item total">
-                <span>Total</span>
-                <span id="total">Rs. 0</span>
-            </div>
-        </div>
-    </div>
+            <div class="summary-row"><span>Subtotal</span><strong><?php echo price($totals['subtotal']); ?></strong></div>
+            <div class="summary-row"><span>Delivery</span><strong><?php echo price($totals['shipping']); ?></strong></div>
+            <div class="summary-row summary-total"><span>Total</span><span><?php echo price($totals['total']); ?></span></div>
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top: 18px;">Place order</button>
+            <p class="muted small" style="margin: 12px 0 0; text-align: center;">You can cancel while the order is still pending.</p>
+        </aside>
+    </form>
 </div>
-
-<script>
-(function () {
-    var ACCOUNT_EMAIL = <?php echo json_encode($prefillEmail, JSON_HEX_TAG | JSON_HEX_AMP); ?>;
-    var items = HFCart.getItems();
-
-    // Nothing to check out: send them back to the cart page
-    if (!items.length) {
-        window.location.replace('cart.php');
-        return;
-    }
-
-    var esc = HFCart.escapeHtml;
-    var money = HFCart.formatPrice;
-
-    document.getElementById('summary-items').innerHTML = items.map(function (item) {
-        return '<div class="checkout-summary-item">' +
-            '<span>' + esc(item.name) + ' x ' + item.qty +
-                (item.custom ? '<br><small style="color: var(--soft-pink, #D98291);">Customized: ' + esc(HFCart.customSummary(item.custom)) + '</small>' : '') +
-            '</span>' +
-            '<span>' + money(item.price * item.qty) + '</span>' +
-        '</div>';
-    }).join('');
-
-    var t = HFCart.totals(items);
-    document.getElementById('subtotal').textContent = money(t.subtotal);
-    document.getElementById('shipping').textContent = money(t.shipping);
-    document.getElementById('total').textContent = money(t.total);
-
-    var form = document.getElementById('checkout-form');
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-
-        var data = new FormData(form);
-        var customer = {
-            fullname: String(data.get('fullname') || '').trim(),
-            phone: String(data.get('phone') || '').trim(),
-            email: String(data.get('email') || '').trim(),
-            address: String(data.get('address') || '').trim(),
-            city: String(data.get('city') || '').trim(),
-            payment: String(data.get('payment_method') || 'cod')
-        };
-
-        // "required" still accepts only spaces, so check again after trimming
-        if (!customer.fullname || !customer.address || !customer.city) {
-            HFCart.toast('Fill in your name, address and city to place the order');
-            return;
-        }
-
-        var order = HFCart.placeOrder(customer, ACCOUNT_EMAIL);
-        if (!order) {
-            window.location.href = 'cart.php';
-            return;
-        }
-        window.location.href = 'order-confirmation.php?order=' + encodeURIComponent(order.id) + '&new=1';
-    });
-})();
-</script>
 
 <?php include 'assets/includes/footer.php'; ?>
