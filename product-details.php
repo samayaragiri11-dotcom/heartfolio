@@ -1,119 +1,182 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+require_once 'assets/includes/bootstrap.php';
+
+$product = product_find((int)($_GET['id'] ?? 0));
+
+if (!$product) {
+    http_response_code(404);
+    $pageTitle = 'Magazine not found';
+    include 'assets/includes/navbar.php';
+    echo '<div class="wrap page"><div class="empty"><i class="fa-solid fa-book" aria-hidden="true"></i>'
+       . '<h3>Magazine not found</h3><p>It may have been removed from the shop.</p>'
+       . '<a href="shop.php" class="btn btn-primary">Back to the shop</a></div></div>';
+    include 'assets/includes/footer.php';
+    exit();
 }
-include_once 'assets/includes/products-data.php';
 
-$product = hf_product($_GET['id'] ?? 0);
+$pid     = (int)$product['id'];
+$gallery = array_merge([$product['image']], array_column(
+    db_all('SELECT image FROM product_images WHERE product_id = ? ORDER BY sort_order, id', [$pid]), 'image'));
+$stock   = (int)$product['stock'];
+[$stockClass, $stockText] = stock_label($stock);
+$inCart  = cart_qty_of_product($pid);
+$maxQty  = max(1, min(99, $stock - $inCart));
 
+$reviews = db_all('SELECT r.rating, r.comment, r.created_at, u.fullname
+                   FROM reviews r JOIN users u ON u.id = r.user_id
+                   WHERE r.product_id = ? ORDER BY r.created_at DESC', [$pid]);
+
+// A customer can review once they have received this magazine
+$user = current_user();
+$canReview = false;
+$myReview = null;
+if ($user) {
+    $canReview = (bool)db_value("SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                                 WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'delivered'", [(int)$user['id'], $pid]);
+    $myReview = db_one('SELECT rating, comment FROM reviews WHERE product_id = ? AND user_id = ?', [$pid, (int)$user['id']]);
+}
+
+$related = db_all(product_select_sql() . ' WHERE p.is_active = 1 AND p.id <> ? AND p.category_id <=> ? ORDER BY RAND() LIMIT 4',
+    [$pid, $product['category_id'] === null ? null : (int)$product['category_id']]);
+
+$pageTitle = $product['name'];
+$active = 'shop';
 include 'assets/includes/navbar.php';
 ?>
 
-<?php if (!$product): ?>
-<div class="container" style="text-align: center; padding: 60px 20px;">
-    <h2>Magazine not found</h2>
-    <p style="margin: 10px 0 20px;">This magazine does not exist or has been removed.</p>
-    <a href="shop.php" class="btn btn-primary">Back to Shop</a>
-</div>
-<?php else: ?>
-<div class="container product-details">
-    <div class="product-details-content">
-        <!-- Product Image -->
-        <div class="product-details-image">
-            <img src="<?php echo hf_e($product['image']); ?>" alt="<?php echo hf_e($product['name']); ?> Magazine" id="main-image">
-            <?php if (count($product['thumbs']) > 1): ?>
-                <div class="product-thumbnails">
-                    <?php foreach ($product['thumbs'] as $i => $thumb): ?>
-                        <img src="<?php echo hf_e($thumb); ?>" alt="<?php echo hf_e($product['name']); ?> view <?php echo $i + 1; ?>"
-                             class="<?php echo $i === 0 ? 'active' : ''; ?>" onclick="changeImage(this)">
+<div class="wrap page">
+    <?php echo flash_render(); ?>
+    <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="shop.php">Shop</a>
+        <?php if (!empty($product['category_slug'])): ?>
+            / <a href="shop.php?category=<?php echo e($product['category_slug']); ?>"><?php echo e($product['category_name']); ?></a>
+        <?php endif; ?>
+        / <?php echo e($product['name']); ?>
+    </nav>
+
+    <div class="pd-grid">
+        <div class="pd-gallery">
+            <div class="pd-main">
+                <img id="pd-main-img" src="<?php echo e(img_url($gallery[0])); ?>" alt="<?php echo e($product['name']); ?> magazine cover">
+            </div>
+            <?php if (count($gallery) > 1): ?>
+                <div class="pd-thumbs">
+                    <?php foreach ($gallery as $i => $img): ?>
+                        <button type="button" class="<?php echo $i === 0 ? 'active' : ''; ?>" data-thumb="<?php echo e(img_url($img)); ?>" aria-label="Show image <?php echo $i + 1; ?>">
+                            <img src="<?php echo e(img_url($img)); ?>" alt="">
+                        </button>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- Product Info -->
-        <div class="product-details-info">
-            <h1><?php echo hf_e($product['name']); ?></h1>
-            <p class="price"><?php echo hf_price($product['price']); ?></p>
-            <div class="rating">
-                <?php
-                $full = (int)floor($product['rating']);
-                $half = ($product['rating'] - $full) >= 0.5;
-                for ($i = 1; $i <= 5; $i++) {
-                    if ($i <= $full) {
-                        echo '<i class="fas fa-star"></i>';
-                    } elseif ($half && $i === $full + 1) {
-                        echo '<i class="fas fa-star-half-alt"></i>';
-                    } else {
-                        echo '<i class="far fa-star"></i>';
-                    }
-                }
-                ?>
-                <span>(<?php echo (int)$product['reviews']; ?> reviews)</span>
+        <div class="pd-info">
+            <h1><?php echo e($product['name']); ?></h1>
+            <div class="pd-rating">
+                <?php if ((int)$product['review_count'] > 0): ?>
+                    <?php echo stars((float)$product['avg_rating']); ?>
+                    <a href="#reviews"><?php echo e(number_format((float)$product['avg_rating'], 1)); ?> from <?php echo (int)$product['review_count']; ?> <?php echo (int)$product['review_count'] === 1 ? 'review' : 'reviews'; ?></a>
+                <?php else: ?>
+                    <span>No reviews yet</span>
+                <?php endif; ?>
             </div>
-            <p class="description"><?php echo hf_e($product['description']); ?></p>
-            <div class="product-info">
-                <p><strong>Pages:</strong> <?php echo (int)$product['pages']; ?></p>
-                <p><strong>Size:</strong> <?php echo hf_e($product['size']); ?></p>
-                <p><strong>Paper:</strong> <?php echo hf_e($product['paper']); ?></p>
-                <p><strong>Category:</strong> <?php echo hf_e(hf_category_label($product['category'])); ?></p>
-            </div>
-            <div class="quantity-selector">
-                <button type="button" onclick="changeQuantity(-1)">-</button>
-                <input type="number" id="quantity" value="1" min="1" max="99" onchange="changeQuantity(0)">
-                <button type="button" onclick="changeQuantity(1)">+</button>
-            </div>
-            <div class="product-details-buttons">
-                <button type="button" class="btn btn-primary" onclick="addToCart()">Add to Cart</button>
-                <button type="button" class="btn btn-pink" onclick="buyNow()">Buy Now</button>
-            </div>
-            <div class="customize-cta" style="margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--sand, #DCC7AD);">
-                <p style="margin-bottom: 12px;">Make it yours: add your own photos, a title and a message.</p>
-                <a href="customize.php?id=<?php echo (int)$product['id']; ?>" class="btn btn-secondary">
-                    <i class="fas fa-pen" aria-hidden="true"></i> Customize with your photos
-                </a>
-            </div>
+            <div class="pd-price"><?php echo price($product['price']); ?></div>
+            <p class="pd-desc"><?php echo nl2br(e($product['description'])); ?></p>
+
+            <dl class="spec-list">
+                <div><dt>Pages</dt><dd><?php echo (int)$product['pages']; ?></dd></div>
+                <div><dt>Size</dt><dd><?php echo e($product['size']); ?></dd></div>
+                <div><dt>Paper</dt><dd><?php echo e($product['paper']); ?></dd></div>
+                <div><dt>Availability</dt><dd class="<?php echo $stockClass; ?>"><?php echo e($stockText); ?></dd></div>
+            </dl>
+
+            <?php if ($stock > 0 && $inCart < $stock): ?>
+                <form action="cart-action.php" method="post" data-ajax-cart>
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="action" value="add">
+                    <input type="hidden" name="product_id" value="<?php echo $pid; ?>">
+                    <div class="buy-row">
+                        <div class="qty">
+                            <button type="button" data-step="-1" aria-label="Decrease quantity">&minus;</button>
+                            <input type="number" name="quantity" value="1" min="1" max="<?php echo $maxQty; ?>" aria-label="Quantity">
+                            <button type="button" data-step="1" aria-label="Increase quantity">+</button>
+                        </div>
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i> Add to cart</button>
+                        <button type="submit" name="buy_now" value="1" class="btn btn-outline">Buy now</button>
+                    </div>
+                </form>
+            <?php elseif ($stock > 0): ?>
+                <p class="alert alert-info">You have all available copies in your cart. <a href="cart.php">View cart</a></p>
+            <?php else: ?>
+                <p class="alert alert-warn">This magazine is sold out right now. Check back soon.</p>
+            <?php endif; ?>
+
+            <?php if ($stock > $inCart): ?>
+                <div class="customize-card">
+                    <div>
+                        <h3>Make it yours</h3>
+                        <p>Add your own cover photo, page photos, a title and a message.</p>
+                    </div>
+                    <a href="customize.php?id=<?php echo $pid; ?>" class="btn btn-accent"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Customize</a>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
+
+    <section class="reviews" id="reviews">
+        <h2>Reviews</h2>
+        <?php if ($reviews): ?>
+            <div class="review-summary">
+                <span class="big"><?php echo e(number_format((float)$product['avg_rating'], 1)); ?></span>
+                <div><?php echo stars((float)$product['avg_rating']); ?><div class="muted small"><?php echo count($reviews); ?> <?php echo count($reviews) === 1 ? 'review' : 'reviews'; ?></div></div>
+            </div>
+            <div class="review-list">
+                <?php foreach ($reviews as $r): ?>
+                    <article class="review">
+                        <div class="review-head">
+                            <strong><?php echo e($r['fullname']); ?></strong>
+                            <span class="muted"><?php echo e(nice_date($r['created_at'])); ?></span>
+                        </div>
+                        <?php echo stars((float)$r['rating']); ?>
+                        <p style="margin-top: 6px;"><?php echo nl2br(e($r['comment'])); ?></p>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php else: ?>
+            <p class="muted">No reviews yet. Customers can review a magazine after it has been delivered.</p>
+        <?php endif; ?>
+
+        <?php if ($canReview): ?>
+            <form class="review-form" action="review-action.php" method="post">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="product_id" value="<?php echo $pid; ?>">
+                <h3><?php echo $myReview ? 'Update your review' : 'Write a review'; ?></h3>
+                <fieldset class="field" style="border: 0; padding: 0; margin: 0 0 14px;">
+                    <legend class="label">Your rating</legend>
+                    <div class="star-input">
+                        <?php for ($s = 5; $s >= 1; $s--): ?>
+                            <input type="radio" id="star<?php echo $s; ?>" name="rating" value="<?php echo $s; ?>" <?php echo (int)($myReview['rating'] ?? 0) === $s ? 'checked' : ''; ?> required>
+                            <label for="star<?php echo $s; ?>" title="<?php echo $s; ?> stars"><span aria-hidden="true">&#9733;</span><span class="sr-only"><?php echo $s; ?> stars</span></label>
+                        <?php endfor; ?>
+                    </div>
+                </fieldset>
+                <div class="field">
+                    <label for="comment">Your review</label>
+                    <textarea id="comment" name="comment" rows="4" maxlength="1000" required><?php echo e($myReview['comment'] ?? ''); ?></textarea>
+                </div>
+                <button class="btn btn-primary" type="submit"><?php echo $myReview ? 'Update review' : 'Post review'; ?></button>
+            </form>
+        <?php endif; ?>
+    </section>
+
+    <?php if ($related): ?>
+        <section class="section" style="padding-bottom: 0;">
+            <div class="section-head"><h2>You may also like</h2></div>
+            <div class="product-grid">
+                <?php foreach ($related as $p) { echo product_card($p); } ?>
+            </div>
+        </section>
+    <?php endif; ?>
 </div>
-
-<script>
-var PRODUCT = <?php echo json_encode([
-    'id'       => $product['id'],
-    'name'     => $product['name'],
-    'price'    => $product['price'],
-    'image'    => $product['image'],
-    'category' => hf_category_label($product['category']),
-], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
-
-function changeImage(thumbnail) {
-    document.getElementById('main-image').src = thumbnail.src;
-    document.querySelectorAll('.product-thumbnails img').forEach(function (img) {
-        img.classList.remove('active');
-    });
-    thumbnail.classList.add('active');
-}
-
-function getQuantity() {
-    var q = parseInt(document.getElementById('quantity').value, 10);
-    return isNaN(q) ? 1 : Math.min(99, Math.max(1, q));
-}
-
-function changeQuantity(step) {
-    document.getElementById('quantity').value = Math.min(99, Math.max(1, getQuantity() + step));
-}
-
-function addToCart() {
-    var qty = getQuantity();
-    HFCart.add(PRODUCT, qty);
-    HFCart.toast('Added ' + qty + ' x ' + PRODUCT.name + ' to cart');
-}
-
-function buyNow() {
-    HFCart.add(PRODUCT, getQuantity());
-    window.location.href = 'checkout.php';
-}
-</script>
-<?php endif; ?>
 
 <?php include 'assets/includes/footer.php'; ?>

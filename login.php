@@ -1,65 +1,47 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+require_once 'assets/includes/bootstrap.php';
+
+$next = safe_next($_GET['next'] ?? '', '');
+if (current_user()) {
+    redirect($next ?: (is_admin() ? 'admin/index.php' : 'index.php'));
 }
+$oldEmail = $_SESSION['old_email'] ?? '';
+unset($_SESSION['old_email']);
+
+$pageTitle = 'Log in';
+include 'assets/includes/navbar.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — Heartfolio</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
 
-<nav style="background:#fff; padding:15px 20px; border-bottom:1px solid #f2ecf0; text-align:center;">
-    <a href="index.php" style="font-weight:700; color:#e8536f; text-decoration:none; font-size:1.1rem;">
-        Heartfolio
-    </a>
-</nav>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <img class="logo" src="assets/images/logo.jpg" alt="" onerror="this.style.display='none'">
+        <h1>Welcome back</h1>
+        <p class="sub">Log in to your Heartfolio account</p>
+        <?php echo flash_render(); ?>
 
-<div class="container">
-    <div class="form-container">
-        <img src="assets/images/logo.jpg" alt="Heartfolio" onerror="this.style.display='none'">
-        <h2>Welcome Back</h2>
-        <p>Log in to your account</p>
-
-        <?php if (!empty($_GET['error'])): ?>
-            <div class="alert-error">
-                <?php echo htmlspecialchars($_GET['error']); ?>
+        <form action="login_process.php" method="post">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="next" value="<?php echo e($next); ?>">
+            <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" value="<?php echo e($oldEmail); ?>" required autocomplete="email" autofocus>
             </div>
-        <?php endif; ?>
-
-        <?php if (!empty($_GET['success'])): ?>
-            <div class="alert-error" style="background:#d4edda; color:#155724; border-color:#c3e6cb;">
-                <?php echo htmlspecialchars($_GET['success']); ?>
-            </div>
-        <?php endif; ?>
-
-        <form id="loginForm" action="login_process.php" method="POST">
-            <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" placeholder="you@example.com" required>
-            </div>
-
-            <div class="form-group">
+            <div class="field">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" placeholder="••••••••" required>
+                <div class="pw-wrap">
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                    <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+                </div>
             </div>
-
-            <button type="submit" class="btn btn-primary">Login</button>
+            <div class="field-inline">
+                <span></span>
+                <a href="forgot-password.php">Forgot password?</a>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Log in</button>
         </form>
 
-        <div class="form-footer">
-            <p>Don't have an account? <a href="signup.php">Sign Up</a></p>
-        </div>
+        <div class="auth-foot">New to Heartfolio? <a href="signup.php<?php echo $next ? '?next=' . urlencode($next) : ''; ?>">Create an account</a></div>
     </div>
 </div>
 
-<footer style="text-align:center; padding:30px 20px; color:#7a7280; font-size:0.9rem;">
-    &copy; <?php echo date('Y'); ?> Heartfolio
-</footer>
-
-</body>
-</html>
+<?php include 'assets/includes/footer.php'; ?>

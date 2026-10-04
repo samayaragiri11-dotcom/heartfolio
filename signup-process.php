@@ -1,77 +1,47 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-include 'db.php';
+require_once 'assets/includes/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: signup.php');
-    exit();
+    redirect('signup.php');
+}
+csrf_check();
+
+$fullname = trim($_POST['fullname'] ?? '');
+$email    = trim($_POST['email'] ?? '');
+$phone    = trim($_POST['phone'] ?? '');
+$password = (string)($_POST['password'] ?? '');
+$confirm  = (string)($_POST['confirm_password'] ?? '');
+$next     = safe_next($_POST['next'] ?? '', '');
+$back     = 'signup.php' . ($next ? '?next=' . urlencode($next) : '');
+
+$_SESSION['old_signup'] = ['fullname' => $fullname, 'email' => $email, 'phone' => $phone];
+
+$error = null;
+if ($fullname === '' || $email === '' || $phone === '' || $password === '') {
+    $error = 'Please fill in every field.';
+} elseif (mb_strlen($fullname) > 100) {
+    $error = 'Your name is too long.';
+} elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $error = 'Enter a valid email address.';
+} elseif (!preg_match('/^[0-9+\- ]{7,20}$/', $phone)) {
+    $error = 'Enter a valid phone number.';
+} elseif (strlen($password) < 8) {
+    $error = 'Your password needs at least 8 characters.';
+} elseif ($password !== $confirm) {
+    $error = 'The two passwords don\'t match.';
+} elseif (db_value('SELECT COUNT(*) FROM users WHERE email = ?', [$email])) {
+    $error = 'An account with this email already exists. Try logging in.';
 }
 
-function fail(string $msg): void {
-    header('Location: signup.php?error=' . urlencode($msg));
-    exit();
+if ($error) {
+    flash('error', $error);
+    redirect($back);
 }
 
-$fullname         = trim($_POST['fullname'] ?? '');
-$email            = trim($_POST['email'] ?? '');
-$phone            = trim($_POST['phone'] ?? '');
-$password         = $_POST['password'] ?? '';
-$confirm_password = $_POST['confirm_password'] ?? '';
+$id = db_exec("INSERT INTO users (fullname, email, phone, password, role) VALUES (?, ?, ?, ?, 'customer')",
+    [$fullname, $email, $phone, password_hash($password, PASSWORD_DEFAULT)]);
 
-if ($fullname === '' || $email === '' || $phone === '' ||
-    $password === '' || $confirm_password === '') {
-    fail('Please fill in all required fields');
-}
-
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    fail('Please enter a valid email address');
-}
-
-if (strlen($password) < 6) {
-    fail('Password must be at least 6 characters');
-}
-
-if ($password !== $confirm_password) {
-    fail('Passwords do not match');
-}
-
-$check_stmt = $conn->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
-if (!$check_stmt) {
-    fail('Database error: ' . $conn->error);
-}
-$check_stmt->bind_param('s', $email);
-$check_stmt->execute();
-$check_stmt->store_result();
-
-if ($check_stmt->num_rows > 0) {
-    $check_stmt->close();
-    fail('Email already registered');
-}
-$check_stmt->close();
-
-$hashed_password = password_hash($password, PASSWORD_DEFAULT);
-
-$stmt = $conn->prepare(
-    'INSERT INTO users (fullname, email, phone, password) VALUES (?, ?, ?, ?)'
-);
-if (!$stmt) {
-    fail('Registration error: ' . $conn->error);
-}
-$stmt->bind_param('ssss', $fullname, $email, $phone, $hashed_password);
-
-if (!$stmt->execute()) {
-    fail('Registration failed: ' . $stmt->error);
-}
-
-$stmt->close();
-$conn->close();
-
-/* NO auto-login — send them to login.php with a success message */
-header('Location: login.php?success=' . urlencode('Account created! Please log in.'));
-exit();
+unset($_SESSION['old_signup']);
+log_user_in(['id' => $id, 'fullname' => $fullname, 'email' => $email, 'role' => 'customer']);
+flash('success', 'Welcome to Heartfolio, ' . $fullname . '!');
+redirect($next ?: 'index.php');

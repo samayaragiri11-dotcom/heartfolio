@@ -1,60 +1,44 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-include 'db.php';
+require_once 'assets/includes/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: login.php');
-    exit();
+    redirect('login.php');
 }
-
-function fail(string $msg): void {
-    header('Location: login.php?error=' . urlencode($msg));
-    exit();
-}
+csrf_check();
 
 $email    = trim($_POST['email'] ?? '');
-$password = $_POST['password'] ?? '';
+$password = (string)($_POST['password'] ?? '');
+$next     = safe_next($_POST['next'] ?? '', '');
+$back     = 'login.php' . ($next ? '?next=' . urlencode($next) : '');
+
+$_SESSION['old_email'] = $email;
+
+// Slow down password guessing: after 5 failures, wait a minute
+$fails = $_SESSION['login_fails'] ?? ['count' => 0, 'at' => 0];
+if ($fails['count'] >= 5 && time() - $fails['at'] < 60) {
+    flash('error', 'Too many attempts. Please wait a minute and try again.');
+    redirect($back);
+}
 
 if ($email === '' || $password === '') {
-    fail('Please fill in all fields');
+    flash('error', 'Enter your email and password.');
+    redirect($back);
 }
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    fail('Please enter a valid email address');
-}
+$user = db_one('SELECT id, fullname, email, password, role FROM users WHERE email = ? LIMIT 1', [$email]);
 
-$stmt = $conn->prepare('SELECT id, fullname, email, password, role FROM users WHERE email = ? LIMIT 1');
-if (!$stmt) {
-    fail('Something went wrong. Please try again.');
-}
-$stmt->bind_param('s', $email);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-
-// Same message for "no such email" and "wrong password", so nobody can
-// find out which emails have accounts
+// Same message whether the email or the password is wrong, so emails can't be guessed
 if (!$user || !password_verify($password, $user['password'])) {
-    $conn->close();
-    fail('Invalid email or password');
+    $_SESSION['login_fails'] = ['count' => $fails['count'] + 1, 'at' => time()];
+    flash('error', 'That email and password don\'t match.');
+    redirect($back);
 }
 
-// New session id after login, so an old session id can't be reused
-session_regenerate_id(true);
+unset($_SESSION['login_fails'], $_SESSION['old_email']);
+log_user_in($user);
+flash('success', 'Welcome back, ' . $user['fullname'] . '!');
 
-$_SESSION['user_id']  = $user['id'];
-$_SESSION['fullname'] = $user['fullname'];
-$_SESSION['email']    = $user['email'];
-$_SESSION['role']     = $user['role'];
-
-$conn->close();
-
-if ($user['role'] === 'admin') {
-    header('Location: admin/index.php');
-} else {
-    header('Location: index.php');
+if ($next) {
+    redirect($next);
 }
-exit();
+redirect($user['role'] === 'admin' ? 'admin/index.php' : 'index.php');
